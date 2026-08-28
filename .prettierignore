@@ -5,3 +5,9 @@ astro.config.mjs
 pnpm-lock.yaml
 test-results/
 dist-cli/
+
+# Convex AI files (managed by `npx convex ai-files`)
+.agents/
+.claude/
+convex/_generated/ai/
+skills-lock.json

@@ -1,3 +1,5 @@
+import { TEST_SCOPES, type TestScope } from "../convex/validators.js";
+
 export const MODES = ["dev", "production", "frontend", "all"] as const;
 export type Mode = (typeof MODES)[number];
 export type ExecutableMode = Exclude<Mode, "all">;
@@ -14,7 +16,12 @@ export interface CliArguments {
   mode: Mode;
   playwrightArguments: string[];
   productionApiBaseUrl: string | undefined;
+  route: string | undefined;
+  saveResults: boolean;
+  scope: TestScope;
 }
+
+const BOOLEAN_OPTIONS = new Set(["save-results"]);
 
 export function parseCliArguments(argumentsList: string[]): CliArguments {
   let mode: string = "dev";
@@ -26,7 +33,10 @@ export function parseCliArguments(argumentsList: string[]): CliArguments {
   let executionId: string | undefined;
   let executionSheet: string | undefined;
   let productionApiBaseUrl: string | undefined;
+  let route: string | undefined;
+  let scope: string = TEST_SCOPES[0];
   let help = false;
+  let saveResults = false;
   const playwrightArguments: string[] = [];
 
   for (let index = 0; index < argumentsList.length; index += 1) {
@@ -43,9 +53,12 @@ export function parseCliArguments(argumentsList: string[]): CliArguments {
 
     const option = getOption(argument);
     if (option) {
+      const isBooleanOption = BOOLEAN_OPTIONS.has(option);
       const inlineValue = getInlineValue(argument, option);
-      const value = inlineValue ?? argumentsList[index + 1];
-      if (inlineValue === undefined) {
+      const value = isBooleanOption
+        ? undefined
+        : (inlineValue ?? argumentsList[index + 1]);
+      if (!isBooleanOption && inlineValue === undefined) {
         index += 1;
       }
 
@@ -77,6 +90,15 @@ export function parseCliArguments(argumentsList: string[]): CliArguments {
         case "production-api-base-url":
           productionApiBaseUrl = value;
           break;
+        case "route":
+          route = value;
+          break;
+        case "save-results":
+          saveResults = true;
+          break;
+        case "scope":
+          scope = value ?? "";
+          break;
       }
       continue;
     }
@@ -87,6 +109,12 @@ export function parseCliArguments(argumentsList: string[]): CliArguments {
   if (!isMode(mode)) {
     throw new Error(
       `Unknown mode "${mode}". Choose one of: ${MODES.join(", ")}.`,
+    );
+  }
+
+  if (!isScope(scope)) {
+    throw new Error(
+      `Unknown scope "${scope}". Choose one of: ${TEST_SCOPES.join(", ")}.`,
     );
   }
 
@@ -102,6 +130,9 @@ export function parseCliArguments(argumentsList: string[]): CliArguments {
     mode,
     playwrightArguments,
     productionApiBaseUrl,
+    route,
+    saveResults,
+    scope,
   };
 }
 
@@ -109,7 +140,7 @@ export function getForwardedArguments(
   argumentsValue: CliArguments,
   mode: ExecutableMode,
 ): string[] {
-  const forwardedArguments = ["--mode", mode];
+  const forwardedArguments = ["--mode", mode, "--scope", argumentsValue.scope];
   const options: Array<[string, string | undefined]> = [
     ["--api-base-url", argumentsValue.apiBaseUrl],
     ["--base-url", argumentsValue.baseUrl],
@@ -119,6 +150,7 @@ export function getForwardedArguments(
     ["--execution-id", argumentsValue.executionId],
     ["--execution-sheet", argumentsValue.executionSheet],
     ["--production-api-base-url", argumentsValue.productionApiBaseUrl],
+    ["--route", argumentsValue.route],
   ];
 
   for (const [name, value] of options) {
@@ -145,6 +177,9 @@ function getOption(argument: string | undefined): string | undefined {
     "execution-sheet",
     "mode",
     "production-api-base-url",
+    "route",
+    "save-results",
+    "scope",
   ];
 
   return optionNames.find(
@@ -162,4 +197,8 @@ function getInlineValue(argument: string, option: string): string | undefined {
 
 function isMode(value: string): value is Mode {
   return (MODES as readonly string[]).includes(value);
+}
+
+function isScope(value: string): value is TestScope {
+  return (TEST_SCOPES as readonly string[]).includes(value);
 }

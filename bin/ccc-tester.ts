@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 
 import { spawn } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import { createRequire } from "node:module";
 import {
   getForwardedArguments,
@@ -9,6 +10,7 @@ import {
   type ExecutableMode,
 } from "../e2e/cli-arguments.js";
 import { getTargetUrl, loadE2eEnvironment } from "../e2e/test-config.js";
+import { saveTestResultsToConvex } from "./convex-report.js";
 
 function printHelp(): void {
   console.log(`Usage: pnpm ccc-tester -- [options] [playwright options]
@@ -23,13 +25,16 @@ Options:
   --api-base-url <url>                 Override the API URL for every mode
   --dev-api-base-url <url>             Override the dev API URL
   --production-api-base-url <url>      Override the production API URL
+  --scope <scope>                      Dashboard area under test (default: execution)
+  --route <path>                       Exact route tested; defaults to the scope route
+  --save-results                       Save test results to the Convex database
   --help                               Show this help
 
 Examples:
   pnpm ccc-tester -- --mode=frontend --client-id=client --clinic-id=clinic \\
     --execution-id=execution --execution-sheet=2026-08-28
   pnpm ccc-tester -- --mode=all --client-id=client --clinic-id=clinic \\
-    --execution-id=execution --execution-sheet=2026-08-28 --headed`);
+    --execution-id=execution --execution-sheet=2026-08-28 --headed --save-results`);
 }
 
 function validateArguments(argumentsValue: CliArguments): void {
@@ -100,12 +105,25 @@ async function main(): Promise<void> {
     argumentsValue.mode === "all"
       ? ["dev", "production", "frontend"]
       : [argumentsValue.mode];
+  const runId = randomUUID();
   let exitCode = 0;
 
   for (const mode of modes) {
     const result = await runPlaywright(mode, argumentsValue);
     if (result !== 0) {
       exitCode = result;
+    }
+
+    if (argumentsValue.saveResults) {
+      try {
+        await saveTestResultsToConvex(mode, argumentsValue, runId);
+      } catch (error) {
+        console.error(
+          `Failed to save results for ${mode} to Convex: ${
+            error instanceof Error ? error.message : error
+          }`,
+        );
+      }
     }
   }
 

@@ -65,3 +65,33 @@ Use Playwright options after the mode, for example `--headed`, `--debug`, or `--
 
 Reports are written to `test-results/<mode>.json`. Credentials are never printed by the CLI. API endpoints can be
 overridden with `--api-base-url`, `--dev-api-base-url`, or `--production-api-base-url`.
+
+## Saving results to Convex
+
+Pass `--save-results` to submit the test results to the Convex database after each mode finishes. The data powers the
+future results dashboard.
+
+```sh
+pnpm test:e2e -- --mode=frontend --client-id=... --clinic-id=... \
+  --execution-id=... --execution-sheet=... --save-results
+```
+
+Each saved result records the dashboard area under test (`--scope`, default `execution`) and the exact route that was
+tested (`--route`). The route is derived from the test arguments for the `execution` scope; pass `--route` explicitly to
+override it. More scopes (e.g. `form`) will be added as the corresponding tests are built.
+
+Setup, once:
+
+1. Create the Convex project and push the schema/functions:
+   `npx convex dev`. This writes `convex/_generated/` and a `.env.local` with the deployment URL.
+2. Store the write secret in the deployment so the `save` mutation accepts results:
+   `npx convex env set CONVEX_WRITE_SECRET <a-random-secret>`.
+3. Make the secret available to the CLI, either in `.env.e2e` or the environment:
+
+   ```dotenv
+   CONVEX_WRITE_SECRET=<a-random-secret>
+   ```
+
+The CLI reads `CONVEX_URL` and `CONVEX_WRITE_SECRET` from `.env.e2e` or the environment, falling back to the `.env.local`
+file written by `npx convex dev` for `CONVEX_URL`. Saving is best-effort: if Convex is unreachable or the variables are
+missing, the CLI warns and keeps the local `test-results/<mode>.json` report.

@@ -6,6 +6,7 @@ import {
   type CliArguments,
   type Mode,
 } from "./cli-arguments.js";
+import type { TestScope } from "../convex/validators.js";
 
 export type TestMode = Exclude<Mode, "all">;
 
@@ -21,6 +22,7 @@ export interface E2eSettings {
 }
 
 const ENV_FILE_NAME = ".env.e2e";
+const CONVEX_ENV_FILE_NAME = ".env.local";
 const DEFAULT_DEV_URL = "http://127.0.0.1:4200";
 const DEFAULT_PRODUCTION_URL = "https://controlcentralcarrier.com";
 const DEFAULT_DEV_API_URL = "https://dev-carrier.dentalautomation.ai/";
@@ -33,9 +35,11 @@ export function loadE2eEnvironment(): void {
     return;
   }
 
-  const envFilePath = resolve(process.cwd(), ENV_FILE_NAME);
-  if (existsSync(envFilePath)) {
-    loadEnvFile(envFilePath);
+  for (const fileName of [ENV_FILE_NAME, CONVEX_ENV_FILE_NAME]) {
+    const envFilePath = resolve(process.cwd(), fileName);
+    if (existsSync(envFilePath)) {
+      loadEnvFile(envFilePath);
+    }
   }
 
   environmentLoaded = true;
@@ -114,13 +118,35 @@ export function getTestSettings(mode: TestMode = getTestMode()): E2eSettings {
   };
 }
 
-export function buildExecutionsPagePath(settings: E2eSettings): string {
+export function buildExecutionsPagePath(
+  settings: Pick<E2eSettings, "clientId" | "clinicId" | "sheetName">,
+): string {
   const query = new URLSearchParams({
     clinic: settings.clinicId,
     sheet: settings.sheetName,
   });
 
   return `/#/executions/${encodeURIComponent(settings.clientId)}?${query.toString()}`;
+}
+
+export function getTestRoute(
+  scope: TestScope,
+  cliArgs: CliArguments,
+): string | undefined {
+  const explicitRoute = cliArgs.route?.trim();
+  if (explicitRoute) {
+    return explicitRoute;
+  }
+
+  if (scope === "execution") {
+    return buildExecutionsPagePath({
+      clientId: cliArgs.clientId ?? "",
+      clinicId: cliArgs.clinicId ?? "",
+      sheetName: cliArgs.executionSheet ?? "",
+    });
+  }
+
+  return undefined;
 }
 
 function ensureTrailingSlash(value: string): string {

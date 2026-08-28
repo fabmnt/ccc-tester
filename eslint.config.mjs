@@ -6,6 +6,7 @@ export default [
   {
     ignores: [
       ".astro/**",
+      "convex/_generated/**",
       "dist/**",
       "dist-cli/**",
       "test-results/**",

@@ -22,7 +22,8 @@
     "format:check": "prettier --check ."
   },
   "dependencies": {
-    "astro": "^7.2.9"
+    "astro": "^7.2.9",
+    "convex": "^1.45.0"
   },
   "allowScripts": {
     "esbuild": true
