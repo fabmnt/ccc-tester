@@ -12,26 +12,23 @@ Create `.env.e2e` in this project. It is ignored by Git:
 
 ```dotenv
 TEST_ACCESS_TOKEN=your-dashboard-access-token
-CCC_CLIENT_ID=dashboard-client-id
-CCC_CLINIC_ID=dashboard-clinic-id
-CCC_EXECUTION_ID=dashboard-execution-or-sheet-id
-CCC_EXECUTION_SHEET=2026-08-28
 ```
 
 `TEST_ACCESS_TOKEN` is the value stored by CCCdashboard as `tokens` in browser local storage. The current dashboard
 implementation uses an access token, not a username/password login, for this setup.
+
+Client, clinic, execution, and sheet values are provided as CLI arguments when running the checks. The only
+configuration values read from the environment are the access token and the optional dev/production dashboard URLs.
 
 Optional values:
 
 ```dotenv
 CCC_DEV_URL=http://127.0.0.1:4200
 CCC_PRODUCTION_URL=https://controlcentralcarrier.com
-CCC_DEV_API_BASE_URL=https://dev-carrier.dentalautomation.ai/
-CCC_PRODUCTION_API_BASE_URL=https://carriers.dentalautomation.ai/
 ```
 
 The sheet should contain at least one row for the real dev and production checks. In the dashboard code, the route
-parameter is a client ID; `CCC_EXECUTION_ID` identifies the selected execution tab/room and is used by the mocked
+parameter is a client ID; the execution ID identifies the selected execution tab/room and is used by the mocked
 frontend check.
 
 Install Chromium once:
@@ -47,10 +44,14 @@ directory, then runs the generated JavaScript file with Node. To compile the CLI
 ## Run the checks
 
 ```sh
-pnpm test:e2e -- --mode=dev
-pnpm test:e2e -- --mode=production
-pnpm test:frontend:e2e
-pnpm test:e2e -- --mode=all
+pnpm test:e2e -- --mode=dev --client-id=dashboard-client-id --clinic-id=dashboard-clinic-id \
+  --execution-id=dashboard-execution-or-sheet-id --execution-sheet=2026-08-28
+pnpm test:e2e -- --mode=production --client-id=dashboard-client-id --clinic-id=dashboard-clinic-id \
+  --execution-id=dashboard-execution-or-sheet-id --execution-sheet=2026-08-28
+pnpm test:frontend:e2e -- --client-id=dashboard-client-id --clinic-id=dashboard-clinic-id \
+  --execution-id=dashboard-execution-or-sheet-id --execution-sheet=2026-08-28
+pnpm test:e2e -- --mode=all --client-id=dashboard-client-id --clinic-id=dashboard-clinic-id \
+  --execution-id=dashboard-execution-or-sheet-id --execution-sheet=2026-08-28
 ```
 
 Modes use the following targets:
@@ -62,5 +63,5 @@ Modes use the following targets:
 
 Use Playwright options after the mode, for example `--headed`, `--debug`, or `--grep executions`.
 
-Reports are written to `test-results/<mode>.json`. Credentials are never printed by the CLI. Use the mode-specific API
-variables when running `--mode=all`; the single `CCC_API_BASE_URL` variable remains available for one-off overrides.
+Reports are written to `test-results/<mode>.json`. Credentials are never printed by the CLI. API endpoints can be
+overridden with `--api-base-url`, `--dev-api-base-url`, or `--production-api-base-url`.

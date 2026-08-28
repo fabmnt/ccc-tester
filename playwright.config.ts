@@ -4,11 +4,12 @@ import {
   getTestMode,
   loadE2eEnvironment,
 } from "./e2e/test-config";
+import { parseCliArguments } from "./e2e/cli-arguments";
 
 loadE2eEnvironment();
 const mode = getTestMode();
-const reportFile =
-  process.env["CCC_REPORT_FILE"] ?? `test-results/${mode}.json`;
+const argumentsValue = parseCliArguments(process.argv.slice(2));
+const reportFile = `test-results/${mode}.json`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -20,7 +21,7 @@ export default defineConfig({
   },
   use: {
     ...devices["Desktop Chrome"],
-    baseURL: process.env["CCC_BASE_URL"] ?? getTargetUrl(mode),
+    baseURL: getTargetUrl(mode, argumentsValue.baseUrl),
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "retain-on-failure",

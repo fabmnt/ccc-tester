@@ -1,8 +1,13 @@
 import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { loadEnvFile } from "node:process";
+import {
+  parseCliArguments,
+  type CliArguments,
+  type Mode,
+} from "./cli-arguments.js";
 
-export type TestMode = "dev" | "production" | "frontend";
+export type TestMode = Exclude<Mode, "all">;
 
 export interface E2eSettings {
   accessToken: string;
@@ -38,16 +43,24 @@ export function loadE2eEnvironment(): void {
 
 export function getTestMode(): TestMode {
   loadE2eEnvironment();
-  const mode = process.env["CCC_TEST_MODE"] ?? "dev";
+  const mode = parseCliArguments(process.argv.slice(2)).mode;
 
-  if (mode === "dev" || mode === "production" || mode === "frontend") {
+  if (mode !== "all") {
     return mode;
   }
 
-  throw new Error(`Unsupported CCC_TEST_MODE "${mode}".`);
+  throw new Error('The "all" mode is only supported by the ccc-tester CLI.');
 }
 
-export function getTargetUrl(mode: TestMode): string {
+export function getTargetUrl(
+  mode: TestMode,
+  baseUrl: string | undefined = parseCliArguments(process.argv.slice(2))
+    .baseUrl,
+): string {
+  if (baseUrl) {
+    return baseUrl;
+  }
+
   const configuredUrl =
     mode === "production"
       ? process.env["CCC_PRODUCTION_URL"]
@@ -60,27 +73,34 @@ export function getTargetUrl(mode: TestMode): string {
 
 export function getTestSettings(mode: TestMode = getTestMode()): E2eSettings {
   loadE2eEnvironment();
+  const argumentsValue = parseCliArguments(process.argv.slice(2));
 
-  const missingVariables = [
-    "TEST_ACCESS_TOKEN",
-    "CCC_CLIENT_ID",
-    "CCC_CLINIC_ID",
-    "CCC_EXECUTION_ID",
-    "CCC_EXECUTION_SHEET",
-  ].filter((name) => !process.env[name]?.trim());
+  const missingArguments = [
+    ["--client-id", argumentsValue.clientId],
+    ["--clinic-id", argumentsValue.clinicId],
+    ["--execution-id", argumentsValue.executionId],
+    ["--execution-sheet", argumentsValue.executionSheet],
+  ]
+    .filter(([, value]) => !value?.trim())
+    .map(([name]) => name);
+  const missingEnvironmentVariables = ["TEST_ACCESS_TOKEN"].filter(
+    (name) => !process.env[name]?.trim(),
+  );
 
-  if (missingVariables.length > 0) {
+  if (missingArguments.length > 0 || missingEnvironmentVariables.length > 0) {
     throw new Error(
-      `Missing ${missingVariables.join(", ")}. Add them to ${ENV_FILE_NAME} in ${process.cwd()} or set them in the environment.`,
+      `Missing ${[...missingArguments, ...missingEnvironmentVariables].join(
+        ", ",
+      )}. Pass test values as CLI arguments and set TEST_ACCESS_TOKEN in ${ENV_FILE_NAME} or the environment.`,
     );
   }
 
   const accessToken = process.env["TEST_ACCESS_TOKEN"]?.trim() ?? "";
-  const clientId = process.env["CCC_CLIENT_ID"]?.trim() ?? "";
-  const clinicId = process.env["CCC_CLINIC_ID"]?.trim() ?? "";
-  const executionId = process.env["CCC_EXECUTION_ID"]?.trim() ?? "";
-  const sheetName = process.env["CCC_EXECUTION_SHEET"]?.trim() ?? "";
-  const apiBaseUrl = getApiBaseUrl(mode);
+  const clientId = argumentsValue.clientId?.trim() ?? "";
+  const clinicId = argumentsValue.clinicId?.trim() ?? "";
+  const executionId = argumentsValue.executionId?.trim() ?? "";
+  const sheetName = argumentsValue.executionSheet?.trim() ?? "";
+  const apiBaseUrl = getApiBaseUrl(mode, argumentsValue);
 
   return {
     accessToken,
@@ -90,7 +110,7 @@ export function getTestSettings(mode: TestMode = getTestMode()): E2eSettings {
     executionId,
     mode,
     sheetName,
-    targetUrl: process.env["CCC_BASE_URL"] ?? getTargetUrl(mode),
+    targetUrl: getTargetUrl(mode, argumentsValue.baseUrl),
   };
 }
 
@@ -107,15 +127,15 @@ function ensureTrailingSlash(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-function getApiBaseUrl(mode: TestMode): string {
+function getApiBaseUrl(mode: TestMode, argumentsValue: CliArguments): string {
   const modeSpecificUrl =
     mode === "production"
-      ? process.env["CCC_PRODUCTION_API_BASE_URL"]
-      : process.env["CCC_DEV_API_BASE_URL"];
+      ? argumentsValue.productionApiBaseUrl
+      : argumentsValue.devApiBaseUrl;
 
   return (
     modeSpecificUrl ??
-    process.env["CCC_API_BASE_URL"] ??
+    argumentsValue.apiBaseUrl ??
     (mode === "production" ? DEFAULT_PRODUCTION_API_URL : DEFAULT_DEV_API_URL)
   );
 }
