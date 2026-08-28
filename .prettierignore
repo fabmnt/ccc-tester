@@ -1,0 +1,7 @@
+.env.e2e
+.env.e2e.local
+.env.e2e.example
+astro.config.mjs
+pnpm-lock.yaml
+test-results/
+dist-cli/

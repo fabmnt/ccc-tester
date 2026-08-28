@@ -1,0 +1,14 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "declaration": false,
+    "allowImportingTsExtensions": false,
+    "noEmit": false,
+    "noEmitOnError": true,
+    "outDir": "dist-cli",
+    "rootDir": ".",
+    "sourceMap": true,
+    "types": ["node"]
+  },
+  "include": ["bin/**/*.ts"]
+}
