@@ -1,8 +1,37 @@
 import { ConvexError, v } from "convex/values";
-import { mutation } from "./_generated/server";
+import { query, mutation } from "./_generated/server";
+import type { Id } from "./_generated/dataModel";
 import { testResultValidator } from "./validators";
 
 const WRITE_SECRET_ENV_VAR = "CONVEX_WRITE_SECRET";
+
+// Convex document IDs are lowercase alphanumeric strings.
+const CONVEX_ID_PATTERN = /^[a-z0-9]{16,}$/;
+
+export const list = query({
+  args: {},
+  handler: async (ctx) => {
+    return await ctx.db
+      .query("testResults")
+      .withIndex("by_started_at")
+      .order("desc")
+      .collect();
+  },
+});
+
+export const getById = query({
+  args: { id: v.string() },
+  handler: async (ctx, { id }) => {
+    if (!CONVEX_ID_PATTERN.test(id)) {
+      return null;
+    }
+    try {
+      return await ctx.db.get("testResults", id as Id<"testResults">);
+    } catch {
+      return null;
+    }
+  },
+});
 
 export const save = mutation({
   args: {

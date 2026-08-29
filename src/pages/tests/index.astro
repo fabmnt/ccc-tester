@@ -1,0 +1,281 @@
+---
+import Layout from "@/layouts/DashboardLayout.astro";
+import {
+  CircleCheckIcon,
+  CircleXIcon,
+  ChevronRightIcon,
+  GaugeIcon,
+  InboxIcon,
+  ListChecksIcon,
+  RotateCwIcon,
+} from "lucide-react";
+import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "@/components/ui/table";
+import { listTestResults } from "@/lib/convex";
+import { formatDateTime, formatDuration, timeAgo } from "@/lib/format";
+
+const results = await listTestResults();
+const total = results.length;
+const passed = results.filter((result) => result.status === "passed").length;
+const failed = total - passed;
+const passRate = total === 0 ? 0 : Math.round((passed / total) * 100);
+
+const TEST_MODES = ["dev", "production", "frontend"];
+const modes = TEST_MODES.map((mode) => {
+  const modeResults = results.filter((result) => result.mode === mode);
+  const modePassed = modeResults.filter(
+    (result) => result.status === "passed",
+  ).length;
+  return {
+    mode,
+    total: modeResults.length,
+    passed: modePassed,
+    failed: modeResults.length - modePassed,
+  };
+});
+---
+
+<Layout title="Test results" headerTitle="Test results">
+  <div class="flex flex-col gap-6">
+    <div class="flex flex-wrap items-end justify-between gap-3">
+      <div class="flex flex-col gap-1">
+        <h1 class="text-xl font-semibold tracking-tight">Test results</h1>
+        <p class="text-sm text-muted-foreground">
+          Latest CCCdashboard check runs. Refresh after a run to see new
+          results.
+        </p>
+      </div>
+      <a
+        href="/tests"
+        class={buttonVariants({ variant: "outline", size: "sm" })}
+      >
+        <RotateCwIcon />
+        Refresh
+      </a>
+    </div>
+
+    <div class="grid grid-cols-2 gap-3 lg:grid-cols-4">
+      <Card size="sm">
+        <CardContent class="flex flex-col gap-1.5">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-sm text-muted-foreground">Total runs</span>
+            <ListChecksIcon class="size-4 text-muted-foreground" />
+          </div>
+          <p class="text-2xl font-semibold tracking-tight tabular-nums">
+            {total}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card size="sm">
+        <CardContent class="flex flex-col gap-1.5">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-sm text-muted-foreground">Passed</span>
+            <CircleCheckIcon class="size-4 text-emerald-500" />
+          </div>
+          <p class="text-2xl font-semibold tracking-tight tabular-nums">
+            {passed}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card size="sm">
+        <CardContent class="flex flex-col gap-1.5">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-sm text-muted-foreground">Failed</span>
+            <CircleXIcon
+              class={failed > 0
+                ? "size-4 text-destructive"
+                : "size-4 text-muted-foreground"}
+            />
+          </div>
+          <p
+            class={failed > 0
+              ? "text-2xl font-semibold tracking-tight tabular-nums text-destructive"
+              : "text-2xl font-semibold tracking-tight tabular-nums"}
+          >
+            {failed}
+          </p>
+        </CardContent>
+      </Card>
+
+      <Card size="sm">
+        <CardContent class="flex flex-col gap-2">
+          <div class="flex items-center justify-between gap-2">
+            <span class="text-sm text-muted-foreground">Pass rate</span>
+            <GaugeIcon class="size-4 text-muted-foreground" />
+          </div>
+          <p class="text-2xl font-semibold tracking-tight tabular-nums">
+            {passRate}%
+          </p>
+          <div
+            class="h-1.5 w-full overflow-hidden rounded-full bg-muted"
+            role="img"
+            aria-label={`${passRate}% pass rate`}
+          >
+            <div
+              class={passRate >= 50
+                ? "h-full rounded-full bg-emerald-500"
+                : "h-full rounded-full bg-destructive"}
+              style={`width: ${passRate}%`}
+            >
+            </div>
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+
+    <Card>
+      <CardHeader>
+        <CardTitle>By mode</CardTitle>
+      </CardHeader>
+      <CardContent class="grid gap-3 sm:grid-cols-3">
+        {
+          modes.map(
+            ({
+              mode,
+              total: modeTotal,
+              passed: modePassed,
+              failed: modeFailed,
+            }) => (
+              <div class="flex flex-col gap-2 rounded-lg border p-3">
+                <div class="flex items-center justify-between gap-2">
+                  <span class="text-sm font-medium capitalize">{mode}</span>
+                  <span
+                    class={
+                      modeTotal === 0
+                        ? "text-xs text-muted-foreground/60 tabular-nums"
+                        : "text-xs text-muted-foreground tabular-nums"
+                    }
+                  >
+                    {modeTotal === 0
+                      ? "no runs"
+                      : `${modePassed}/${modeTotal} passed`}
+                  </span>
+                </div>
+                <div
+                  class="flex h-1.5 w-full gap-0.5 overflow-hidden rounded-full bg-muted"
+                  role="img"
+                  aria-label={`${mode} checks: ${modePassed} passed, ${modeFailed} failed`}
+                >
+                  <span
+                    class="h-full bg-emerald-500"
+                    style={`width: ${modeTotal === 0 ? 0 : (modePassed / modeTotal) * 100}%`}
+                  />
+                  <span
+                    class="h-full bg-destructive"
+                    style={`width: ${modeTotal === 0 ? 0 : (modeFailed / modeTotal) * 100}%`}
+                  />
+                </div>
+              </div>
+            ),
+          )
+        }
+      </CardContent>
+    </Card>
+
+    <Card>
+      <CardHeader class="flex items-center justify-between gap-2">
+        <CardTitle>Results</CardTitle>
+        <p class="text-sm text-muted-foreground tabular-nums">{total} saved</p>
+      </CardHeader>
+      <CardContent>
+        {
+          total === 0 ? (
+            <div class="flex flex-col items-center gap-2 py-12 text-center">
+              <div class="flex size-10 items-center justify-center rounded-full bg-muted">
+                <InboxIcon class="size-5 text-muted-foreground" />
+              </div>
+              <p class="text-sm font-medium">No test results yet</p>
+              <p class="max-w-sm text-sm text-muted-foreground">
+                Run the tester with{" "}
+                <code class="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                  --save-results
+                </code>{" "}
+                or POST to{" "}
+                <code class="rounded bg-muted px-1 py-0.5 font-mono text-xs">
+                  /api/run
+                </code>{" "}
+                to populate this view.
+              </p>
+            </div>
+          ) : (
+            <Table>
+              <TableHeader>
+                <TableRow>
+                  <TableHead class="text-muted-foreground">Status</TableHead>
+                  <TableHead class="text-muted-foreground">Test</TableHead>
+                  <TableHead class="text-muted-foreground">Mode</TableHead>
+                  <TableHead class="text-muted-foreground">Client</TableHead>
+                  <TableHead class="text-muted-foreground">Started</TableHead>
+                  <TableHead class="text-right text-muted-foreground">
+                    Duration
+                  </TableHead>
+                  <TableHead>
+                    <span class="sr-only">Open</span>
+                  </TableHead>
+                </TableRow>
+              </TableHeader>
+              <TableBody>
+                {results.map((result) => (
+                  <TableRow key={result._id}>
+                    <TableCell>
+                      <Badge
+                        variant={
+                          result.status === "passed" ? "success" : "destructive"
+                        }
+                      >
+                        {result.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell class="max-w-96 truncate">
+                      <a
+                        href={`/tests/${result._id}`}
+                        class="font-medium text-foreground underline-offset-4 hover:underline"
+                      >
+                        {result.testTitle}
+                      </a>
+                    </TableCell>
+                    <TableCell class="text-muted-foreground">
+                      {result.mode}
+                    </TableCell>
+                    <TableCell class="max-w-32 truncate text-muted-foreground">
+                      {result.clientId}
+                    </TableCell>
+                    <TableCell
+                      class="whitespace-nowrap text-muted-foreground"
+                      title={formatDateTime(result.startedAt)}
+                    >
+                      {timeAgo(result.startedAt)}
+                    </TableCell>
+                    <TableCell class="text-right text-muted-foreground tabular-nums">
+                      {formatDuration(result.durationMs)}
+                    </TableCell>
+                    <TableCell class="text-right">
+                      <a
+                        href={`/tests/${result._id}`}
+                        class="inline-flex size-7 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+                        aria-label={`Open ${result.testTitle}`}
+                      >
+                        <ChevronRightIcon class="size-4" />
+                      </a>
+                    </TableCell>
+                  </TableRow>
+                ))}
+              </TableBody>
+            </Table>
+          )
+        }
+      </CardContent>
+    </Card>
+  </div>
+</Layout>

@@ -1,0 +1,46 @@
+---
+import "@/styles/global.css";
+import { AppSidebar } from "@/components/app-sidebar";
+
+/** @type {{ title: string; headerTitle?: string }} */
+const { title, headerTitle = "Dashboard" } = Astro.props;
+---
+
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico" />
+    <meta name="generator" content={Astro.generator} />
+    <title>{title}</title>
+    <script is:inline>
+      // Applies the persisted theme before first paint to avoid a flash.
+      // Storage key must stay in sync with app-sidebar.tsx.
+      (() => {
+        try {
+          const stored = window.localStorage.getItem("ccc-theme");
+          const dark =
+            stored === "dark" ||
+            (stored !== "light" &&
+              window.matchMedia("(prefers-color-scheme: dark)").matches);
+          if (dark) {
+            document.documentElement.classList.add("dark");
+          }
+        } catch {
+          // localStorage unavailable — keep the browser default (light).
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <AppSidebar
+      client:load
+      pathname={Astro.url.pathname}
+      headerTitle={headerTitle}
+    >
+      <slot />
+    </AppSidebar>
+  </body>
+</html>

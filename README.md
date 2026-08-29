@@ -95,3 +95,24 @@ Setup, once:
 The CLI reads `CONVEX_URL` and `CONVEX_WRITE_SECRET` from `.env.e2e` or the environment, falling back to the `.env.local`
 file written by `npx convex dev` for `CONVEX_URL`. Saving is best-effort: if Convex is unreachable or the variables are
 missing, the CLI warns and keeps the local `test-results/<mode>.json` report.
+
+## Running from the Astro endpoint
+
+`POST /api/run` starts a background test run and always enables result saving. The endpoint returns `202` with a `runId`;
+results become available on the `/tests` page after the run finishes.
+
+Set `CONVEX_WRITE_SECRET` in the Astro server environment. The JSON payload uses the CLI options as structured fields:
+
+```json
+{
+  "mode": "all",
+  "clientId": "dashboard-client-id",
+  "clinicId": "dashboard-clinic-id",
+  "executionId": "dashboard-execution-or-sheet-id",
+  "executionSheet": "2026-08-28",
+  "playwrightArguments": ["--headed"]
+}
+```
+
+The required `clientId`, `clinicId`, `executionId`, and `executionSheet` fields are validated by the endpoint. Optional
+fields include `baseUrl`, `apiBaseUrl`, `devApiBaseUrl`, `productionApiBaseUrl`, `scope`, and `route`.

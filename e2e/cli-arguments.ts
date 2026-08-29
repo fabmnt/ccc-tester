@@ -162,6 +162,11 @@ export function getForwardedArguments(
   return forwardedArguments;
 }
 
+/** True when the token is a ccc-tester option (e.g. "--mode=dev", "--save-results") rather than a Playwright argument. */
+export function isKnownCliOption(argument: string): boolean {
+  return getOption(argument) !== undefined;
+}
+
 function getOption(argument: string | undefined): string | undefined {
   if (!argument) {
     return undefined;

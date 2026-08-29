@@ -1,16 +1,7 @@
 #!/usr/bin/env node
 
-import { spawn } from "node:child_process";
-import { randomUUID } from "node:crypto";
-import { createRequire } from "node:module";
-import {
-  getForwardedArguments,
-  parseCliArguments,
-  type CliArguments,
-  type ExecutableMode,
-} from "../e2e/cli-arguments.js";
-import { getTargetUrl, loadE2eEnvironment } from "../e2e/test-config.js";
-import { saveTestResultsToConvex } from "./convex-report.js";
+import { parseCliArguments } from "../e2e/cli-arguments.js";
+import { runTestRun } from "../src/lib/test-runner.js";
 
 function printHelp(): void {
   console.log(`Usage: pnpm ccc-tester -- [options] [playwright options]
@@ -37,96 +28,15 @@ Examples:
     --execution-id=execution --execution-sheet=2026-08-28 --headed --save-results`);
 }
 
-function validateArguments(argumentsValue: CliArguments): void {
-  const missingArguments = [
-    ["--client-id", argumentsValue.clientId],
-    ["--clinic-id", argumentsValue.clinicId],
-    ["--execution-id", argumentsValue.executionId],
-    ["--execution-sheet", argumentsValue.executionSheet],
-  ]
-    .filter(([, value]) => !value?.trim())
-    .map(([name]) => name);
-
-  if (missingArguments.length > 0) {
-    throw new Error(
-      `Missing ${missingArguments.join(", ")}. Run with --help for usage.`,
-    );
-  }
-}
-
-function runPlaywright(
-  mode: ExecutableMode,
-  argumentsValue: CliArguments,
-): Promise<number> {
-  const require = createRequire(import.meta.url);
-  const playwrightCliPath = require.resolve("@playwright/test/cli");
-  const childArguments = [
-    playwrightCliPath,
-    "test",
-    ...argumentsValue.playwrightArguments,
-    "--",
-    ...getForwardedArguments(argumentsValue, mode),
-  ];
-
-  console.log(
-    `\nRunning CCCdashboard ${mode} E2E against ${getTargetUrl(mode, argumentsValue.baseUrl)}`,
-  );
-
-  return new Promise((resolvePromise, rejectPromise) => {
-    const child = spawn(process.execPath, childArguments, {
-      env: process.env,
-      stdio: "inherit",
-    });
-
-    child.on("error", rejectPromise);
-    child.on("exit", (code, signal) => {
-      if (signal) {
-        resolvePromise(1);
-        return;
-      }
-
-      resolvePromise(code ?? 1);
-    });
-  });
-}
-
 async function main(): Promise<void> {
-  loadE2eEnvironment();
-  const argumentsValue = parseCliArguments(process.argv.slice(2));
+  const argv = process.argv.slice(2);
 
-  if (argumentsValue.help) {
+  if (parseCliArguments(argv).help) {
     printHelp();
     return;
   }
 
-  validateArguments(argumentsValue);
-
-  const modes: ExecutableMode[] =
-    argumentsValue.mode === "all"
-      ? ["dev", "production", "frontend"]
-      : [argumentsValue.mode];
-  const runId = randomUUID();
-  let exitCode = 0;
-
-  for (const mode of modes) {
-    const result = await runPlaywright(mode, argumentsValue);
-    if (result !== 0) {
-      exitCode = result;
-    }
-
-    if (argumentsValue.saveResults) {
-      try {
-        await saveTestResultsToConvex(mode, argumentsValue, runId);
-      } catch (error) {
-        console.error(
-          `Failed to save results for ${mode} to Convex: ${
-            error instanceof Error ? error.message : error
-          }`,
-        );
-      }
-    }
-  }
-
+  const { exitCode } = await runTestRun(argv);
   process.exitCode = exitCode;
 }
 

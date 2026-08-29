@@ -1,0 +1,135 @@
+---
+import {
+  ChevronLeftIcon,
+  CircleAlertIcon,
+  FileArchiveIcon,
+  FileImageIcon,
+  VideoIcon,
+} from "lucide-react";
+import Layout from "@/layouts/DashboardLayout.astro";
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
+import { buttonVariants } from "@/components/ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { getTestResult } from "@/lib/convex";
+import { formatDateTime, formatDuration } from "@/lib/format";
+
+const id = Astro.params.id ?? "";
+const result = await getTestResult(id);
+
+const facts = result
+  ? [
+      { label: "Mode", value: result.mode },
+      { label: "Client", value: result.clientId },
+      { label: "Clinic", value: result.clinicId },
+      { label: "Scope", value: result.scope },
+      { label: "Started", value: formatDateTime(result.startedAt) },
+      { label: "Duration", value: formatDuration(result.durationMs) },
+      { label: "Run ID", value: result.runId },
+      { label: "Sheet", value: result.sheetName },
+      { label: "Commit", value: result.commitHash ?? "—" },
+      { label: "Route", value: result.route ?? "—" },
+    ]
+  : [];
+
+const artifacts = result
+  ? [
+      { label: "Trace", path: result.tracePath, icon: FileArchiveIcon },
+      { label: "Screenshot", path: result.screenshotPath, icon: FileImageIcon },
+      { label: "Video", path: result.videoPath, icon: VideoIcon },
+    ].filter((artifact) => artifact.path !== undefined)
+  : [];
+---
+
+<Layout
+  title={result ? result.testTitle : "Test result"}
+  headerTitle="Test results"
+>
+  {
+    result === null ? (
+      <Card>
+        <CardContent class="flex flex-col items-start gap-2">
+          <p class="text-sm text-muted-foreground">Test result not found.</p>
+          <a href="/tests" class={buttonVariants({ variant: "outline" })}>
+            Back to test results
+          </a>
+        </CardContent>
+      </Card>
+    ) : (
+      <div class="flex flex-col gap-4">
+        <a
+          href="/tests"
+          class="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
+        >
+          <ChevronLeftIcon class="size-4" />
+          Back to results
+        </a>
+
+        <div class="flex flex-col gap-2">
+          <div class="flex flex-wrap items-center gap-2.5">
+            <Badge
+              variant={result.status === "passed" ? "success" : "destructive"}
+            >
+              {result.status}
+            </Badge>
+            <h1 class="text-xl font-semibold tracking-tight">
+              {result.testTitle}
+            </h1>
+          </div>
+          <p class="text-sm text-muted-foreground">
+            {result.mode} · {result.clientId} · started{" "}
+            {formatDateTime(result.startedAt)} · took{" "}
+            {formatDuration(result.durationMs)}
+          </p>
+        </div>
+
+        {result.errorMessage && (
+          <Alert variant="destructive">
+            <CircleAlertIcon />
+            <AlertTitle>Test failed</AlertTitle>
+            <AlertDescription>{result.errorMessage}</AlertDescription>
+          </Alert>
+        )}
+
+        <Card>
+          <CardHeader>
+            <CardTitle>Run details</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <dl class="grid grid-cols-1 gap-x-8 gap-y-3 sm:grid-cols-2 lg:grid-cols-3">
+              {facts.map((fact) => (
+                <div>
+                  <dt class="text-sm text-muted-foreground">{fact.label}</dt>
+                  <dd class="break-words text-sm font-medium">{fact.value}</dd>
+                </div>
+              ))}
+            </dl>
+          </CardContent>
+        </Card>
+
+        {artifacts.length > 0 && (
+          <Card>
+            <CardHeader>
+              <CardTitle>Artifacts</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ul class="flex flex-col gap-2">
+                {artifacts.map(({ label, path, icon: Icon }) => (
+                  <li class="flex items-center gap-2 rounded-lg border px-3 py-2">
+                    <Icon class="size-4 shrink-0 text-muted-foreground" />
+                    <span class="w-22 shrink-0 text-sm text-muted-foreground">
+                      {label}
+                    </span>
+                    <code class="min-w-0 flex-1 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                      {path}
+                    </code>
+                  </li>
+                ))}
+              </ul>
+            </CardContent>
+          </Card>
+        )}
+      </div>
+    )
+  }
+</Layout>

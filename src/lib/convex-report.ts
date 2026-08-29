@@ -3,9 +3,9 @@ import { existsSync, readFileSync } from "node:fs";
 import { resolve } from "node:path";
 import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
-import type { CliArguments, ExecutableMode } from "../e2e/cli-arguments.js";
-import { getTestRoute } from "../e2e/test-config.js";
-import type { TestResult } from "../convex/validators.js";
+import type { CliArguments, ExecutableMode } from "../../e2e/cli-arguments.js";
+import { getTestRoute } from "../../e2e/test-config.js";
+import type { TestResult } from "../../convex/validators.js";
 
 const CONVEX_URL_ENV_VAR = "CONVEX_URL";
 const CONVEX_WRITE_SECRET_ENV_VAR = "CONVEX_WRITE_SECRET";
@@ -38,13 +38,23 @@ interface PlaywrightResult {
   attachments?: Array<{ name?: string; path?: string }>;
 }
 
+export interface ConvexReportOptions {
+  /** Convex deployment URL; falls back to the CONVEX_URL environment variable. */
+  convexUrl?: string;
+  /** Shared secret for the write mutation; falls back to CONVEX_WRITE_SECRET. */
+  writeSecret?: string;
+}
+
 export async function saveTestResultsToConvex(
   mode: ExecutableMode,
   cliArgs: CliArguments,
   runId: string,
+  options: ConvexReportOptions = {},
 ): Promise<void> {
-  const convexUrl = process.env[CONVEX_URL_ENV_VAR]?.trim();
-  const writeSecret = process.env[CONVEX_WRITE_SECRET_ENV_VAR]?.trim();
+  const convexUrl =
+    options.convexUrl ?? process.env[CONVEX_URL_ENV_VAR]?.trim();
+  const writeSecret =
+    options.writeSecret ?? process.env[CONVEX_WRITE_SECRET_ENV_VAR]?.trim();
   if (!convexUrl || !writeSecret) {
     console.error(
       `--save-results requires ${CONVEX_URL_ENV_VAR} and ${CONVEX_WRITE_SECRET_ENV_VAR} to be set in the environment. Skipping Convex save.`,
