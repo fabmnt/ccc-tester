@@ -7,6 +7,8 @@ export const modeValidator = v.union(
   v.literal("frontend"),
 );
 
+export type TestMode = Infer<typeof modeValidator>;
+
 export const TEST_SCOPES = ["execution"] as const;
 export type TestScope = (typeof TEST_SCOPES)[number];
 

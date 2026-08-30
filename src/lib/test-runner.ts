@@ -162,19 +162,21 @@ async function executeRun(
         exitCode = result;
       }
 
-      try {
-        await saveTestResultsToConvex(
-          mode,
-          prepared.argumentsValue,
-          prepared.runId,
-          options,
-        );
-      } catch (error) {
-        console.error(
-          `Failed to save results for ${mode} to Convex: ${
-            error instanceof Error ? error.message : error
-          }`,
-        );
+      if (prepared.argumentsValue.saveResults) {
+        try {
+          await saveTestResultsToConvex(
+            mode,
+            prepared.argumentsValue,
+            prepared.runId,
+            options,
+          );
+        } catch (error) {
+          console.error(
+            `Failed to save results for ${mode} to Convex: ${
+              error instanceof Error ? error.message : error
+            }`,
+          );
+        }
       }
     }
   } finally {

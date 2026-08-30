@@ -85,6 +85,7 @@ export async function saveTestResultsToConvex(
   const outcome = await client.mutation(anyApi.testResults.save, {
     secret: writeSecret,
     runId,
+    mode,
     results,
   });
   const skippedRun =

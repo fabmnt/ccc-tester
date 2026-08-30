@@ -1,5 +1,5 @@
 import * as React from "react";
-import { ClipboardCheckIcon, MoonIcon, SunIcon } from "lucide-react";
+import { ClipboardCheckIcon, MoonIcon, PlayIcon, SunIcon } from "lucide-react";
 
 import {
   Sidebar,
@@ -70,6 +70,7 @@ export function AppSidebar({
   children,
 }: AppSidebarProps) {
   const isTestsActive = pathname === "/tests" || pathname.startsWith("/tests/");
+  const isRunActive = pathname === "/run" || pathname.startsWith("/run/");
   const { theme, toggleTheme } = useTheme();
 
   return (
@@ -106,6 +107,16 @@ export function AppSidebar({
                   >
                     <ClipboardCheckIcon />
                     <span>Tests results</span>
+                  </SidebarMenuButton>
+                </SidebarMenuItem>
+                <SidebarMenuItem>
+                  <SidebarMenuButton
+                    isActive={isRunActive}
+                    tooltip="Run tests"
+                    render={<a href="/run" />}
+                  >
+                    <PlayIcon />
+                    <span>Run tests</span>
                   </SidebarMenuButton>
                 </SidebarMenuItem>
               </SidebarMenu>
