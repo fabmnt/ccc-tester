@@ -7,9 +7,16 @@ import CardContent from "@/components/ui/card/CardContent.astro";
 import CardDescription from "@/components/ui/card/CardDescription.astro";
 import CardHeader from "@/components/ui/card/CardHeader.astro";
 import CardTitle from "@/components/ui/card/CardTitle.astro";
+import type { RunDoc, TestResultDoc } from "@/lib/convex";
 import { formatDateTime, formatDuration, timeAgo } from "@/lib/format";
 
-const { runs, checksByRun, passRate } = Astro.props;
+interface Props {
+  runs: RunDoc[];
+  checksByRun: Map<string, TestResultDoc[]>;
+  passRate: number;
+}
+
+const { runs, checksByRun, passRate } = Astro.props as Props;
 ---
 
 <section aria-labelledby="run-history-heading">

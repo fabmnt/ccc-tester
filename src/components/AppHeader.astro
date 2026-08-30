@@ -68,12 +68,14 @@ const navLinkClasses =
 
   const updateThemeIcons = () => {
     const isDark = document.documentElement.classList.contains("dark");
-    document.querySelectorAll("[data-theme-icon]").forEach((icon) => {
-      icon.classList.toggle(
-        "hidden",
-        icon.dataset.themeIcon !== (isDark ? "dark" : "light"),
-      );
-    });
+    document
+      .querySelectorAll<SVGElement>("[data-theme-icon]")
+      .forEach((icon) => {
+        icon.classList.toggle(
+          "hidden",
+          icon.dataset.themeIcon !== (isDark ? "dark" : "light"),
+        );
+      });
   };
 
   updateThemeIcons();

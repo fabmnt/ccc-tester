@@ -169,17 +169,26 @@ const RUN_MODES = ["all", "dev", "production", "frontend"];
 
 <script>
   import { actions } from "astro:actions";
+  import type { TestRunPayload } from "@/lib/run-request";
 
-  const form = document.querySelector("#run-tests-form");
-  const modeValue = form?.querySelector("[data-mode-value]");
-  const startButton = form?.querySelector("#start-run-button");
-  const submitLabel = form?.querySelector("[data-submit-label]");
-  const idleIcon = form?.querySelector("[data-idle-icon]");
-  const loadingIcon = form?.querySelector("[data-loading-icon]");
-  const statusElements = form?.querySelectorAll("[data-run-status]");
-  const runIdElement = form?.querySelector("[data-run-id]");
-  const errorElement = form?.querySelector("[data-run-error]");
-  const modeButtons = form?.querySelectorAll("[data-mode]");
+  const form = document.querySelector<HTMLFormElement>("#run-tests-form");
+  const modeValue = form?.querySelector<HTMLInputElement>("[data-mode-value]");
+  const startButton =
+    form?.querySelector<HTMLButtonElement>("#start-run-button");
+  const submitLabel = form?.querySelector<HTMLElement>("[data-submit-label]");
+  const idleIcon = form?.querySelector<SVGElement>("[data-idle-icon]");
+  const loadingIcon = form?.querySelector<SVGElement>("[data-loading-icon]");
+  const statusElements =
+    form?.querySelectorAll<HTMLElement>("[data-run-status]");
+  const runIdElement = form?.querySelector<HTMLElement>("[data-run-id]");
+  const errorElement = form?.querySelector<HTMLElement>("[data-run-error]");
+  const modeButtons = form?.querySelectorAll<HTMLButtonElement>("[data-mode]");
+
+  type RunMode = NonNullable<TestRunPayload["mode"]>;
+  type OptionalTextField = Exclude<
+    keyof TestRunPayload,
+    "mode" | "scope" | "playwrightArguments"
+  >;
 
   const optionalFieldNames = [
     "clientId",
@@ -191,9 +200,11 @@ const RUN_MODES = ["all", "dev", "production", "frontend"];
     "devApiBaseUrl",
     "productionApiBaseUrl",
     "route",
-  ];
+  ] as const satisfies readonly OptionalTextField[];
 
-  const setStatus = (kind, message = "") => {
+  type StatusKind = "started" | "error" | null;
+
+  const setStatus = (kind: StatusKind, message = "") => {
     statusElements?.forEach((element) => {
       element.classList.toggle("hidden", element.dataset.runStatus !== kind);
     });
@@ -205,7 +216,7 @@ const RUN_MODES = ["all", "dev", "production", "frontend"];
     }
   };
 
-  const setSubmitting = (submitting) => {
+  const setSubmitting = (submitting: boolean) => {
     if (startButton) {
       startButton.disabled = submitting;
     }
@@ -222,13 +233,13 @@ const RUN_MODES = ["all", "dev", "production", "frontend"];
     loadingIcon?.classList.toggle("hidden", !submitting);
   };
 
-  const buildPayload = (formData) => {
+  const buildPayload = (formData: FormData): TestRunPayload => {
     const rawMode = formData.get("mode");
-    const mode =
+    const mode: RunMode =
       rawMode === "all" || rawMode === "production" || rawMode === "frontend"
         ? rawMode
         : "dev";
-    const payload = { mode };
+    const payload: TestRunPayload = { mode };
 
     optionalFieldNames.forEach((name) => {
       const value = formData.get(name);

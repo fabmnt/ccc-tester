@@ -17,6 +17,7 @@ import {
   Sun,
   TriangleAlert,
   Video,
+  type IconProps,
 } from "@lucide/astro";
 
 const icons = {
@@ -37,9 +38,15 @@ const icons = {
   sun: Sun,
   "triangle-alert": TriangleAlert,
   video: Video,
-};
+} as const;
 
-const { name, class: className, ...attrs } = Astro.props;
+type IconName = keyof typeof icons;
+
+interface Props extends IconProps {
+  name: IconName;
+}
+
+const { name, class: className, ...attrs } = Astro.props as Props;
 const IconComponent = icons[name] ?? CircleAlert;
 ---
 

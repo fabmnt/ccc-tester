@@ -1,5 +1,6 @@
 import eslint from "@eslint/js";
 import eslintPluginAstro from "eslint-plugin-astro";
+import tsParser from "@typescript-eslint/parser";
 import globals from "globals";
 
 export default [
@@ -10,12 +11,20 @@ export default [
       "dist/**",
       "dist-cli/**",
       "test-results/**",
-      "**/*.ts",
-      // Bejamas components use TypeScript frontmatter, which this ESLint parser cannot parse with TS 7.
-      "src/components/ui/**",
     ],
   },
   eslint.configs.recommended,
+  {
+    files: ["**/*.ts"],
+    languageOptions: {
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
+      parser: tsParser,
+      sourceType: "module",
+    },
+  },
   {
     files: ["astro.config.mjs", "bin/**/*.mjs"],
     languageOptions: {

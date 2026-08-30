@@ -33,9 +33,17 @@ const facts = result
 
 const artifacts = result
   ? [
-      { label: "Trace", path: result.tracePath, icon: "file-archive" },
-      { label: "Screenshot", path: result.screenshotPath, icon: "file-image" },
-      { label: "Video", path: result.videoPath, icon: "video" },
+      {
+        label: "Trace",
+        path: result.tracePath,
+        icon: "file-archive" as const,
+      },
+      {
+        label: "Screenshot",
+        path: result.screenshotPath,
+        icon: "file-image" as const,
+      },
+      { label: "Video", path: result.videoPath, icon: "video" as const },
     ].filter((artifact) => artifact.path !== undefined)
   : [];
 ---
