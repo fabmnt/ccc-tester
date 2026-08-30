@@ -44,10 +44,12 @@ import TestResultsContent from "@/components/test-results-content.astro";
                 class="flex flex-col gap-5 md:flex-row md:items-start md:justify-between"
               >
                 <div class="flex min-w-0 items-start gap-3.5">
-                  <Skeleton class="size-11 shrink-0 rounded-xl" />
-                  <div class="flex min-w-0 flex-col gap-2 pt-2">
-                    <Skeleton class="h-8 w-64 max-w-full rounded" />
-                    <Skeleton class="h-4 w-80 max-w-full rounded" />
+                  <div class="min-w-0">
+                    <div class="inline-flex items-center gap-x-2">
+                      <Skeleton class="size-11 shrink-0 rounded-xl" />
+                      <Skeleton class="h-8 w-64 max-w-full rounded" />
+                    </div>
+                    <Skeleton class="mt-1 h-4 w-80 max-w-full rounded" />
                   </div>
                 </div>
                 <div
@@ -73,22 +75,42 @@ import TestResultsContent from "@/components/test-results-content.astro";
 
         <Card aria-hidden="true" class="gap-0 py-0">
           <CardHeader class="border-b px-5 py-5 md:px-6">
-            <div class="flex flex-col gap-2">
+            <div>
               <Skeleton class="h-5 w-32 rounded" />
-              <Skeleton class="h-4 w-72 max-w-full rounded" />
+              <Skeleton class="mt-1 h-4 w-72 max-w-full rounded" />
+            </div>
+            <div
+              class="col-start-2 row-span-2 row-start-1 self-start justify-self-end rounded-lg bg-muted/60 px-3 py-2"
+            >
+              <Skeleton class="ml-auto h-5 w-10 rounded" />
+              <Skeleton class="ml-auto mt-1 h-3 w-16 rounded" />
             </div>
           </CardHeader>
           <CardContent class="px-0 py-0">
             {
               Array.from({ length: 3 }).map(() => (
-                <div class="flex h-20 items-center gap-3 border-b px-5 py-4 last:border-b-0 md:px-6">
+                <div class="flex items-center gap-3 border-b px-5 py-4 last:border-b-0 md:px-6">
                   <Skeleton class="size-9 shrink-0 rounded-lg" />
                   <div class="min-w-0 flex-1">
-                    <Skeleton class="h-4 w-40 max-w-full rounded" />
-                    <Skeleton class="h-3 w-56 max-w-full rounded" />
+                    <div class="flex flex-wrap items-center gap-2">
+                      <Skeleton class="h-4 w-40 max-w-full rounded" />
+                      <Skeleton class="h-5 w-14 rounded-full" />
+                    </div>
+                    <Skeleton class="mt-1 h-3 w-56 max-w-full rounded" />
                   </div>
-                  <Skeleton class="hidden h-8 w-28 rounded lg:block" />
-                  <Skeleton class="h-8 w-12 rounded" />
+                  <div class="hidden w-28 shrink-0 flex-col gap-1.5 lg:flex">
+                    <Skeleton class="h-1.5 w-full rounded-full" />
+                    <Skeleton class="ml-auto h-3 w-16 rounded" />
+                  </div>
+                  <div class="shrink-0">
+                    <Skeleton class="h-4 w-12 rounded" />
+                    <Skeleton class="ml-auto mt-1 h-3 w-10 rounded" />
+                  </div>
+                  <div class="hidden shrink-0 md:block">
+                    <Skeleton class="h-4 w-16 rounded" />
+                    <Skeleton class="ml-auto mt-1 h-3 w-12 rounded" />
+                  </div>
+                  <Skeleton class="size-4 shrink-0 rounded" />
                 </div>
               ))
             }
