@@ -1,0 +1,46 @@
+---
+import {
+  CircleCheck,
+  ChevronLeft,
+  ChevronRight,
+  CircleAlert,
+  CircleX,
+  ClipboardCheck,
+  FileArchive,
+  FileImage,
+  Inbox,
+  LoaderCircle,
+  Moon,
+  PanelLeft,
+  Play,
+  RotateCw,
+  Sun,
+  TriangleAlert,
+  Video,
+} from "@lucide/astro";
+
+const icons = {
+  "check-circle": CircleCheck,
+  "chevron-left": ChevronLeft,
+  "chevron-right": ChevronRight,
+  "circle-alert": CircleAlert,
+  "circle-x": CircleX,
+  "clipboard-check": ClipboardCheck,
+  "file-archive": FileArchive,
+  "file-image": FileImage,
+  inbox: Inbox,
+  "loader-circle": LoaderCircle,
+  moon: Moon,
+  "panel-left": PanelLeft,
+  play: Play,
+  "rotate-cw": RotateCw,
+  sun: Sun,
+  "triangle-alert": TriangleAlert,
+  video: Video,
+};
+
+const { name, class: className, ...attrs } = Astro.props;
+const IconComponent = icons[name] ?? CircleAlert;
+---
+
+<IconComponent class={className} {...attrs} />

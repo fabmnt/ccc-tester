@@ -1,0 +1,262 @@
+---
+import Icon from "@/components/Icon.astro";
+import Badge from "@/components/ui/badge/Badge.astro";
+import Button from "@/components/ui/button/Button.astro";
+import Card from "@/components/ui/card/Card.astro";
+import CardContent from "@/components/ui/card/CardContent.astro";
+import CardDescription from "@/components/ui/card/CardDescription.astro";
+import CardHeader from "@/components/ui/card/CardHeader.astro";
+import CardTitle from "@/components/ui/card/CardTitle.astro";
+import { listRuns, listTestResults } from "@/lib/convex";
+import { formatDateTime, formatDuration, timeAgo } from "@/lib/format";
+import { groupChecksByRun } from "@/lib/test-runs";
+import RunHistory from "@/components/run-history.astro";
+
+const results = await listTestResults();
+const runs = await listRuns();
+const checksByRun = groupChecksByRun(results);
+
+const total = results.length;
+const passed = results.filter((result) => result.status === "passed").length;
+const passRate = total === 0 ? 0 : Math.round((passed / total) * 100);
+const hasActivity = runs.length > 0 || total > 0;
+
+const latestRun = runs[0] ?? null;
+const latestRunId = latestRun?.runId ?? results[0]?.runId ?? null;
+const latestResults =
+  latestRunId === null
+    ? []
+    : [...(checksByRun.get(latestRunId) ?? [])].sort((a, b) => {
+        if (a.status === b.status) return 0;
+        return a.status === "failed" ? -1 : 1;
+      });
+const latestFailedChecks = latestResults.filter(
+  (result) => result.status === "failed",
+);
+const latestTotal = latestRun?.checks ?? latestResults.length;
+const latestPassed =
+  latestRun?.passed ??
+  latestResults.filter((result) => result.status === "passed").length;
+const latestFailedCount = latestRun
+  ? Math.max(0, latestTotal - latestPassed)
+  : latestFailedChecks.length;
+const latestPassRate =
+  latestTotal === 0 ? 0 : Math.round((latestPassed / latestTotal) * 100);
+const latestStartedAt =
+  latestRun?.startedAt ?? latestResults[0]?.startedAt ?? null;
+const latestModes = latestRun?.modes ?? [
+  ...new Set(latestResults.map((result) => result.mode)),
+];
+const latestClientId =
+  latestRun?.clientId ?? latestResults[0]?.clientId ?? null;
+const latestClinicId =
+  latestRun?.clinicId ?? latestResults[0]?.clinicId ?? null;
+const latestCommitHash =
+  latestRun?.commitHash ??
+  latestResults.find((result) => result.commitHash)?.commitHash;
+const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
+const isLatestStale =
+  latestStartedAt !== null && Date.now() - latestStartedAt > STALE_THRESHOLD_MS;
+
+let latestHealth = "healthy";
+if (latestTotal === 0) {
+  latestHealth = "empty";
+} else if (latestFailedCount > 0) {
+  latestHealth = "failing";
+} else if (isLatestStale) {
+  latestHealth = "stale";
+}
+
+let latestHeadline = "All checks passed";
+let latestSummary = "The dashboard is receiving results.";
+let latestStatusTone =
+  "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
+
+if (latestHealth === "failing") {
+  latestHeadline = `${latestFailedCount} of ${latestTotal} checks failed`;
+  latestSummary =
+    "Open a failed check below, fix the issue, then run the suite again.";
+  latestStatusTone = "bg-destructive/10 text-destructive";
+} else if (latestHealth === "stale") {
+  latestHeadline = "No run in the last 24 hours";
+  latestSummary =
+    "The last run is old. Run the suite again to confirm the dashboard is still feeding.";
+  latestStatusTone = "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+} else if (latestHealth === "empty") {
+  latestHeadline = "Run saved without checks";
+  latestSummary = "This run has no individual results to display.";
+  latestStatusTone = "bg-amber-500/10 text-amber-600 dark:text-amber-400";
+}
+---
+
+{
+  !hasActivity ? (
+    <Card>
+      <CardHeader>
+        <CardTitle>No test results yet</CardTitle>
+        <CardDescription>
+          Start a run to see pass rates, failed checks, and run history here.
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="flex flex-col items-start gap-4">
+        <div class="flex size-11 items-center justify-center rounded-xl bg-muted">
+          <Icon name="inbox" class="size-5 text-muted-foreground" />
+        </div>
+        <Button as="a" href="/run" size="sm">
+          <Icon name="play" data-icon="inline-start" />
+          Run tests
+        </Button>
+      </CardContent>
+    </Card>
+  ) : (
+    <>
+      <section aria-labelledby="latest-run-heading">
+        <Card class="gap-0 py-0">
+          <CardHeader class="border-b px-5 py-5 md:px-6 md:py-6">
+            <div class="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
+              <div class="flex min-w-0 items-start gap-3.5">
+                <div
+                  class:list={[
+                    "flex size-11 shrink-0 items-center justify-center rounded-xl",
+                    latestStatusTone,
+                  ]}
+                >
+                  {latestHealth === "failing" ? (
+                    <Icon name="circle-x" class="size-6" aria-hidden="true" />
+                  ) : latestHealth === "stale" || latestHealth === "empty" ? (
+                    <Icon
+                      name="triangle-alert"
+                      class="size-6"
+                      aria-hidden="true"
+                    />
+                  ) : (
+                    <Icon
+                      name="check-circle"
+                      class="size-6"
+                      aria-hidden="true"
+                    />
+                  )}
+                </div>
+                <div class="min-w-0">
+                  <CardTitle class="mt-2 text-2xl tracking-tight md:text-3xl">
+                    <h2 id="latest-run-heading">{latestHeadline}</h2>
+                  </CardTitle>
+                  <CardDescription class="mt-1 max-w-xl">
+                    {latestSummary}
+                  </CardDescription>
+                </div>
+              </div>
+              <div class="shrink-0 rounded-xl bg-background/70 px-4 py-3 md:min-w-28 md:text-right">
+                <div class="text-3xl font-semibold tracking-tight tabular-nums">
+                  {latestTotal === 0 ? "—" : `${latestPassRate}%`}
+                </div>
+                <div class="text-xs text-muted-foreground">pass rate</div>
+              </div>
+            </div>
+          </CardHeader>
+
+          <CardContent class="px-5 py-5 md:px-6">
+            {latestResults.length > 0 ? (
+              <ul class="grid gap-2 md:grid-cols-2">
+                {latestResults.map((result) => (
+                  <li>
+                    <a
+                      href={`/tests/${result._id}`}
+                      class="group flex min-w-0 items-center gap-3 rounded-lg border bg-background/50 px-3 py-3 transition-colors hover:bg-muted/60"
+                    >
+                      <span
+                        class:list={[
+                          "flex size-8 shrink-0 items-center justify-center rounded-lg",
+                          result.status === "passed"
+                            ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                            : "bg-destructive/10 text-destructive",
+                        ]}
+                      >
+                        {result.status === "passed" ? (
+                          <Icon
+                            name="check-circle"
+                            class="size-4"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <Icon
+                            name="circle-x"
+                            class="size-4"
+                            aria-hidden="true"
+                          />
+                        )}
+                      </span>
+                      <span class="min-w-0 flex-1">
+                        <span class="block truncate text-sm font-medium">
+                          {result.testTitle}
+                        </span>
+                        <span class="mt-1 block truncate text-xs text-muted-foreground">
+                          {result.clientId} · {timeAgo(result.startedAt)}
+                        </span>
+                      </span>
+                      <span class="flex shrink-0 items-center gap-2">
+                        <span class="hidden text-xs text-muted-foreground sm:inline">
+                          {formatDuration(result.durationMs)}
+                        </span>
+                        <Badge variant="outline">{result.mode}</Badge>
+                        <Icon
+                          name="chevron-right"
+                          class="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
+                        />
+                      </span>
+                    </a>
+                  </li>
+                ))}
+              </ul>
+            ) : (
+              <div class="rounded-lg border border-dashed px-4 py-5 text-sm text-muted-foreground">
+                No individual check details were saved for this run.
+              </div>
+            )}
+            <div class="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
+              <span
+                title={
+                  latestStartedAt ? formatDateTime(latestStartedAt) : undefined
+                }
+              >
+                {latestStartedAt ? timeAgo(latestStartedAt) : "No start time"}
+              </span>
+              {latestModes.length > 0 && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>{latestModes.join(" · ")}</span>
+                </>
+              )}
+              {latestClientId && latestClinicId && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <span>
+                    {latestClientId}/{latestClinicId}
+                  </span>
+                </>
+              )}
+              {latestRunId && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <code class="font-mono text-[0.7rem]">
+                    {latestRunId.slice(0, 8)}
+                  </code>
+                </>
+              )}
+              {latestCommitHash && (
+                <>
+                  <span aria-hidden="true">·</span>
+                  <code class="font-mono text-[0.7rem]">
+                    {latestCommitHash.slice(0, 7)}
+                  </code>
+                </>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+      </section>
+
+      <RunHistory runs={runs} checksByRun={checksByRun} passRate={passRate} />
+    </>
+  )
+}

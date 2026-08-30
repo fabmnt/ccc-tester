@@ -1,372 +1,100 @@
 ---
 import Layout from "@/layouts/DashboardLayout.astro";
-import {
-  ChevronRightIcon,
-  CircleCheckIcon,
-  CircleXIcon,
-  InboxIcon,
-  PlayIcon,
-  RotateCwIcon,
-  TriangleAlertIcon,
-} from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import { Separator } from "@/components/ui/separator";
-import { listRuns, listTestResults } from "@/lib/convex";
-import { formatDateTime, formatDuration, timeAgo } from "@/lib/format";
-import { groupChecksByRun } from "@/lib/test-runs";
-import RunHistory from "@/components/run-history.astro";
-
-const results = await listTestResults();
-const runs = await listRuns();
-const checksByRun = groupChecksByRun(results);
-
-const total = results.length;
-const passed = results.filter((result) => result.status === "passed").length;
-const passRate = total === 0 ? 0 : Math.round((passed / total) * 100);
-const runsLabel = `${runs.length} ${runs.length === 1 ? "run" : "runs"}`;
-const hasActivity = runs.length > 0 || total > 0;
-
-const latestRun = runs[0] ?? null;
-const latestRunId = latestRun?.runId ?? results[0]?.runId ?? null;
-const latestResults =
-  latestRunId === null
-    ? []
-    : [...(checksByRun.get(latestRunId) ?? [])].sort((a, b) => {
-        if (a.status === b.status) return 0;
-        return a.status === "failed" ? -1 : 1;
-      });
-const latestFailedChecks = latestResults.filter(
-  (result) => result.status === "failed",
-);
-const latestTotal = latestRun?.checks ?? latestResults.length;
-const latestPassed =
-  latestRun?.passed ??
-  latestResults.filter((result) => result.status === "passed").length;
-const latestFailedCount = latestRun
-  ? Math.max(0, latestTotal - latestPassed)
-  : latestFailedChecks.length;
-const latestPassRate =
-  latestTotal === 0 ? 0 : Math.round((latestPassed / latestTotal) * 100);
-const latestStartedAt =
-  latestRun?.startedAt ?? latestResults[0]?.startedAt ?? null;
-const latestModes = latestRun?.modes ?? [
-  ...new Set(latestResults.map((result) => result.mode)),
-];
-const latestClientId =
-  latestRun?.clientId ?? latestResults[0]?.clientId ?? null;
-const latestClinicId =
-  latestRun?.clinicId ?? latestResults[0]?.clinicId ?? null;
-const latestCommitHash =
-  latestRun?.commitHash ??
-  latestResults.find((result) => result.commitHash)?.commitHash;
-const STALE_THRESHOLD_MS = 24 * 60 * 60 * 1000;
-const isLatestStale =
-  latestStartedAt !== null && Date.now() - latestStartedAt > STALE_THRESHOLD_MS;
-
-let latestHealth = "healthy";
-if (latestTotal === 0) {
-  latestHealth = "empty";
-} else if (latestFailedCount > 0) {
-  latestHealth = "failing";
-} else if (isLatestStale) {
-  latestHealth = "stale";
-}
-
-let latestHeadline = "All checks passed";
-let latestSummary = "The dashboard is receiving results.";
-let latestStatusTone =
-  "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400";
-
-if (latestHealth === "failing") {
-  latestHeadline = `${latestFailedCount} of ${latestTotal} checks failed`;
-  latestSummary =
-    "Open a failed check below, fix the issue, then run the suite again.";
-  latestStatusTone = "bg-destructive/10 text-destructive";
-} else if (latestHealth === "stale") {
-  latestHeadline = "No run in the last 24 hours";
-  latestSummary =
-    "The last run is old. Run the suite again to confirm the dashboard is still feeding.";
-  latestStatusTone = "bg-amber-500/10 text-amber-600 dark:text-amber-400";
-} else if (latestHealth === "empty") {
-  latestHeadline = "Run saved without checks";
-  latestSummary = "This run has no individual results to display.";
-  latestStatusTone = "bg-amber-500/10 text-amber-600 dark:text-amber-400";
-}
+import Icon from "@/components/Icon.astro";
+import Button from "@/components/ui/button/Button.astro";
+import Card from "@/components/ui/card/Card.astro";
+import CardContent from "@/components/ui/card/CardContent.astro";
+import CardHeader from "@/components/ui/card/CardHeader.astro";
+import Skeleton from "@/components/ui/skeleton/Skeleton.astro";
+import TestResultsContent from "@/components/test-results-content.astro";
 ---
 
-<Layout title="Test results" headerTitle="Test results">
+<Layout title="Test results">
   <div class="flex flex-col gap-8">
     <div class="flex flex-wrap items-end justify-between gap-4">
       <div class="flex min-w-0 flex-col gap-1.5">
         <div class="flex flex-wrap items-center gap-2.5">
           <h1 class="text-2xl font-semibold tracking-tight">Test results</h1>
-          <Badge variant="outline">{runsLabel}</Badge>
         </div>
-        <p class="max-w-2xl text-sm text-muted-foreground">
-          See the latest run at a glance, then open any run to inspect its
-          checks.
-        </p>
       </div>
       <div class="flex shrink-0 flex-wrap items-center gap-2">
-        <a href="/run" class={buttonVariants({ size: "sm" })}>
-          <PlayIcon />
+        <Button as="a" href="/run" size="sm">
+          <Icon name="play" data-icon="inline-start" />
           Run tests
-        </a>
-        <a
-          href="/tests"
-          class={buttonVariants({ variant: "ghost", size: "sm" })}
-        >
-          <RotateCwIcon />
+        </Button>
+        <Button as="a" href="/tests" variant="ghost" size="sm">
+          <Icon name="rotate-cw" data-icon="inline-start" />
           Refresh
-        </a>
+        </Button>
       </div>
     </div>
 
-    {
-      !hasActivity ? (
-        <Card>
-          <CardHeader>
-            <CardTitle>No test results yet</CardTitle>
-            <CardDescription>
-              Start a run to see pass rates, failed checks, and run history
-              here.
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="flex flex-col items-start gap-4">
-            <div class="flex size-11 items-center justify-center rounded-xl bg-muted">
-              <InboxIcon class="size-5 text-muted-foreground" />
+    <TestResultsContent server:defer>
+      <div
+        slot="fallback"
+        class="flex flex-col gap-8"
+        aria-busy="true"
+        aria-live="polite"
+      >
+        <p class="sr-only">Loading test results...</p>
+        <section aria-hidden="true">
+          <Card class="gap-0 py-0">
+            <CardHeader class="border-b px-5 py-5 md:px-6 md:py-6">
+              <div
+                class="flex flex-col gap-5 md:flex-row md:items-start md:justify-between"
+              >
+                <div class="flex min-w-0 items-start gap-3.5">
+                  <Skeleton class="size-11 shrink-0 rounded-xl" />
+                  <div class="flex min-w-0 flex-col gap-2 pt-2">
+                    <Skeleton class="h-8 w-64 max-w-full rounded" />
+                    <Skeleton class="h-4 w-80 max-w-full rounded" />
+                  </div>
+                </div>
+                <div
+                  class="flex shrink-0 flex-col gap-2 rounded-xl bg-background/70 px-4 py-3"
+                >
+                  <Skeleton class="ml-auto h-9 w-16 rounded" />
+                  <Skeleton class="ml-auto h-3 w-16 rounded" />
+                </div>
+              </div>
+            </CardHeader>
+            <CardContent class="px-5 py-5 md:px-6">
+              <div class="grid gap-2 md:grid-cols-2">
+                {
+                  Array.from({ length: 4 }).map(() => (
+                    <Skeleton class="h-14 rounded-lg border bg-background/50" />
+                  ))
+                }
+              </div>
+              <Skeleton class="mt-5 h-3 w-56 max-w-full rounded" />
+            </CardContent>
+          </Card>
+        </section>
+
+        <Card aria-hidden="true" class="gap-0 py-0">
+          <CardHeader class="border-b px-5 py-5 md:px-6">
+            <div class="flex flex-col gap-2">
+              <Skeleton class="h-5 w-32 rounded" />
+              <Skeleton class="h-4 w-72 max-w-full rounded" />
             </div>
-            <a href="/run" class={buttonVariants({ size: "sm" })}>
-              <PlayIcon />
-              Run tests
-            </a>
+          </CardHeader>
+          <CardContent class="px-0 py-0">
+            {
+              Array.from({ length: 3 }).map(() => (
+                <div class="flex h-20 items-center gap-3 border-b px-5 py-4 last:border-b-0 md:px-6">
+                  <Skeleton class="size-9 shrink-0 rounded-lg" />
+                  <div class="min-w-0 flex-1">
+                    <Skeleton class="h-4 w-40 max-w-full rounded" />
+                    <Skeleton class="h-3 w-56 max-w-full rounded" />
+                  </div>
+                  <Skeleton class="hidden h-8 w-28 rounded lg:block" />
+                  <Skeleton class="h-8 w-12 rounded" />
+                </div>
+              ))
+            }
           </CardContent>
         </Card>
-      ) : (
-        <>
-          <section aria-labelledby="latest-run-heading">
-            <Card className="gap-0 py-0">
-              <CardHeader className="border-b px-5 py-5 md:px-6 md:py-6">
-                <div class="flex flex-col gap-5 md:flex-row md:items-start md:justify-between">
-                  <div class="flex min-w-0 items-start gap-3.5">
-                    <div
-                      class:list={[
-                        "flex size-11 shrink-0 items-center justify-center rounded-xl",
-                        latestStatusTone,
-                      ]}
-                    >
-                      {latestHealth === "failing" ? (
-                        <CircleXIcon class="size-6" aria-hidden="true" />
-                      ) : latestHealth === "stale" ||
-                        latestHealth === "empty" ? (
-                        <TriangleAlertIcon class="size-6" aria-hidden="true" />
-                      ) : (
-                        <CircleCheckIcon class="size-6" aria-hidden="true" />
-                      )}
-                    </div>
-                    <div class="min-w-0">
-                      <CardTitle className="mt-2 text-2xl tracking-tight md:text-3xl">
-                        <h2 id="latest-run-heading">{latestHeadline}</h2>
-                      </CardTitle>
-                      <CardDescription className="mt-1 max-w-xl">
-                        {latestSummary}
-                      </CardDescription>
-                    </div>
-                  </div>
-                  <div class="shrink-0 rounded-xl bg-background/70 px-4 py-3 md:min-w-28 md:text-right">
-                    <div class="text-3xl font-semibold tracking-tight tabular-nums">
-                      {latestTotal === 0 ? "—" : `${latestPassRate}%`}
-                    </div>
-                    <div class="text-xs text-muted-foreground">pass rate</div>
-                  </div>
-                </div>
-
-                <div class="mt-5 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
-                  <span
-                    title={
-                      latestStartedAt
-                        ? formatDateTime(latestStartedAt)
-                        : undefined
-                    }
-                  >
-                    {latestStartedAt
-                      ? timeAgo(latestStartedAt)
-                      : "No start time"}
-                  </span>
-                  {latestModes.length > 0 && (
-                    <>
-                      <span aria-hidden="true">·</span>
-                      <span>{latestModes.join(" · ")}</span>
-                    </>
-                  )}
-                  {latestClientId && latestClinicId && (
-                    <>
-                      <span aria-hidden="true">·</span>
-                      <span>
-                        {latestClientId}/{latestClinicId}
-                      </span>
-                    </>
-                  )}
-                  {latestRunId && (
-                    <>
-                      <span aria-hidden="true">·</span>
-                      <code class="font-mono text-[0.7rem]">
-                        {latestRunId.slice(0, 8)}
-                      </code>
-                    </>
-                  )}
-                  {latestCommitHash && (
-                    <>
-                      <span aria-hidden="true">·</span>
-                      <code class="font-mono text-[0.7rem]">
-                        {latestCommitHash.slice(0, 7)}
-                      </code>
-                    </>
-                  )}
-                </div>
-              </CardHeader>
-
-              <CardContent className="px-5 py-5 md:px-6">
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <h3 class="text-sm font-medium">Checks health</h3>
-                  <p class="text-xs text-muted-foreground">
-                    <span class="font-medium text-foreground">
-                      {latestPassed}
-                    </span>{" "}
-                    passed
-                    <span aria-hidden="true"> · </span>
-                    <span class="font-medium text-foreground">
-                      {latestFailedCount}
-                    </span>{" "}
-                    failed
-                  </p>
-                </div>
-                {latestResults.length > 0 ? (
-                  <ol
-                    class="mt-3 flex h-3 w-full gap-1"
-                    aria-label={`${latestPassed} of ${latestTotal} checks passed`}
-                  >
-                    {latestResults.map((result) => (
-                      <li class="flex min-w-0 flex-1">
-                        <a
-                          href={`/tests/${result._id}`}
-                          class:list={[
-                            "block h-full w-full rounded-full transition-opacity hover:opacity-75 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring",
-                            result.status === "passed"
-                              ? "bg-emerald-500"
-                              : "bg-destructive",
-                          ]}
-                          aria-label={`${result.status}: ${result.testTitle}`}
-                          title={`${result.status}: ${result.testTitle}`}
-                        />
-                      </li>
-                    ))}
-                  </ol>
-                ) : (
-                  <div
-                    class="mt-3 h-3 w-full rounded-full bg-muted"
-                    role="img"
-                    aria-label="No individual check details available"
-                  />
-                )}
-                <div class="mt-2 flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-muted-foreground">
-                  <span class="inline-flex items-center gap-1.5">
-                    <span
-                      class="size-2 rounded-full bg-emerald-500"
-                      aria-hidden="true"
-                    />
-                    Passed
-                  </span>
-                  <span class="inline-flex items-center gap-1.5">
-                    <span
-                      class="size-2 rounded-full bg-destructive"
-                      aria-hidden="true"
-                    />
-                    Failed
-                  </span>
-                  <span>{latestTotal} total checks</span>
-                </div>
-                <Separator className="my-5" />
-
-                <div class="flex flex-wrap items-center justify-between gap-2">
-                  <p class="text-xs text-muted-foreground">
-                    Select a check to view its error details and artifacts.
-                  </p>
-                  {latestFailedCount > 0 && (
-                    <Badge variant="destructive">
-                      {latestFailedCount} failed
-                    </Badge>
-                  )}
-                </div>
-
-                {latestResults.length > 0 ? (
-                  <ul class="mt-4 grid gap-2 md:grid-cols-2">
-                    {latestResults.map((result) => (
-                      <li>
-                        <a
-                          href={`/tests/${result._id}`}
-                          class="group flex min-w-0 items-center gap-3 rounded-lg border bg-background/50 px-3 py-3 transition-colors hover:bg-muted/60"
-                        >
-                          <span
-                            class:list={[
-                              "flex size-8 shrink-0 items-center justify-center rounded-lg",
-                              result.status === "passed"
-                                ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                                : "bg-destructive/10 text-destructive",
-                            ]}
-                          >
-                            {result.status === "passed" ? (
-                              <CircleCheckIcon
-                                class="size-4"
-                                aria-hidden="true"
-                              />
-                            ) : (
-                              <CircleXIcon class="size-4" aria-hidden="true" />
-                            )}
-                          </span>
-                          <span class="min-w-0 flex-1">
-                            <span class="block truncate text-sm font-medium">
-                              {result.testTitle}
-                            </span>
-                            <span class="mt-1 block truncate text-xs text-muted-foreground">
-                              {result.clientId} · {timeAgo(result.startedAt)}
-                            </span>
-                          </span>
-                          <span class="flex shrink-0 items-center gap-2">
-                            <span class="hidden text-xs text-muted-foreground sm:inline">
-                              {formatDuration(result.durationMs)}
-                            </span>
-                            <Badge variant="outline">{result.mode}</Badge>
-                            <ChevronRightIcon class="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5" />
-                          </span>
-                        </a>
-                      </li>
-                    ))}
-                  </ul>
-                ) : (
-                  <div class="mt-4 rounded-lg border border-dashed px-4 py-5 text-sm text-muted-foreground">
-                    No individual check details were saved for this run.
-                  </div>
-                )}
-              </CardContent>
-            </Card>
-          </section>
-
-          <RunHistory
-            runs={runs}
-            checksByRun={checksByRun}
-            passRate={passRate}
-          />
-        </>
-      )
-    }
+      </div>
+    </TestResultsContent>
   </div>
 </Layout>

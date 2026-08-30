@@ -1,16 +1,15 @@
 ---
-import {
-  ChevronLeftIcon,
-  CircleAlertIcon,
-  FileArchiveIcon,
-  FileImageIcon,
-  VideoIcon,
-} from "lucide-react";
+import Icon from "@/components/Icon.astro";
+import Alert from "@/components/ui/alert/Alert.astro";
+import AlertDescription from "@/components/ui/alert/AlertDescription.astro";
+import AlertTitle from "@/components/ui/alert/AlertTitle.astro";
+import Badge from "@/components/ui/badge/Badge.astro";
+import Button from "@/components/ui/button/Button.astro";
+import Card from "@/components/ui/card/Card.astro";
+import CardContent from "@/components/ui/card/CardContent.astro";
+import CardHeader from "@/components/ui/card/CardHeader.astro";
+import CardTitle from "@/components/ui/card/CardTitle.astro";
 import Layout from "@/layouts/DashboardLayout.astro";
-import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Badge } from "@/components/ui/badge";
-import { buttonVariants } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { getTestResult } from "@/lib/convex";
 import { formatDateTime, formatDuration } from "@/lib/format";
 
@@ -34,25 +33,22 @@ const facts = result
 
 const artifacts = result
   ? [
-      { label: "Trace", path: result.tracePath, icon: FileArchiveIcon },
-      { label: "Screenshot", path: result.screenshotPath, icon: FileImageIcon },
-      { label: "Video", path: result.videoPath, icon: VideoIcon },
+      { label: "Trace", path: result.tracePath, icon: "file-archive" },
+      { label: "Screenshot", path: result.screenshotPath, icon: "file-image" },
+      { label: "Video", path: result.videoPath, icon: "video" },
     ].filter((artifact) => artifact.path !== undefined)
   : [];
 ---
 
-<Layout
-  title={result ? result.testTitle : "Test result"}
-  headerTitle="Test results"
->
+<Layout title={result ? result.testTitle : "Test result"}>
   {
     result === null ? (
       <Card>
         <CardContent class="flex flex-col items-start gap-2">
           <p class="text-sm text-muted-foreground">Test result not found.</p>
-          <a href="/tests" class={buttonVariants({ variant: "outline" })}>
+          <Button as="a" href="/tests" variant="outline">
             Back to test results
-          </a>
+          </Button>
         </CardContent>
       </Card>
     ) : (
@@ -61,14 +57,19 @@ const artifacts = result
           href="/tests"
           class="inline-flex w-fit items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground"
         >
-          <ChevronLeftIcon class="size-4" />
+          <Icon name="chevron-left" class="size-4" />
           Back to results
         </a>
 
         <div class="flex flex-col gap-2">
           <div class="flex flex-wrap items-center gap-2.5">
             <Badge
-              variant={result.status === "passed" ? "success" : "destructive"}
+              variant={result.status === "passed" ? "secondary" : "destructive"}
+              class={
+                result.status === "passed"
+                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                  : undefined
+              }
             >
               {result.status}
             </Badge>
@@ -85,7 +86,7 @@ const artifacts = result
 
         {result.errorMessage && (
           <Alert variant="destructive">
-            <CircleAlertIcon />
+            <Icon name="circle-alert" />
             <AlertTitle>Test failed</AlertTitle>
             <AlertDescription>{result.errorMessage}</AlertDescription>
           </Alert>
@@ -114,9 +115,12 @@ const artifacts = result
             </CardHeader>
             <CardContent>
               <ul class="flex flex-col gap-2">
-                {artifacts.map(({ label, path, icon: Icon }) => (
+                {artifacts.map(({ label, path, icon }) => (
                   <li class="flex items-center gap-2 rounded-lg border px-3 py-2">
-                    <Icon class="size-4 shrink-0 text-muted-foreground" />
+                    <Icon
+                      name={icon}
+                      class="size-4 shrink-0 text-muted-foreground"
+                    />
                     <span class="w-22 shrink-0 text-sm text-muted-foreground">
                       {label}
                     </span>

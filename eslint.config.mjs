@@ -11,6 +11,8 @@ export default [
       "dist-cli/**",
       "test-results/**",
       "**/*.ts",
+      // Bejamas components use TypeScript frontmatter, which this ESLint parser cannot parse with TS 7.
+      "src/components/ui/**",
     ],
   },
   eslint.configs.recommended,

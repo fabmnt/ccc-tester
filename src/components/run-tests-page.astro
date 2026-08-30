@@ -1,0 +1,294 @@
+---
+import Icon from "@/components/Icon.astro";
+import Alert from "@/components/ui/alert/Alert.astro";
+import AlertDescription from "@/components/ui/alert/AlertDescription.astro";
+import AlertTitle from "@/components/ui/alert/AlertTitle.astro";
+import Button from "@/components/ui/button/Button.astro";
+import Card from "@/components/ui/card/Card.astro";
+import CardAction from "@/components/ui/card/CardAction.astro";
+import CardContent from "@/components/ui/card/CardContent.astro";
+import CardDescription from "@/components/ui/card/CardDescription.astro";
+import CardHeader from "@/components/ui/card/CardHeader.astro";
+import CardTitle from "@/components/ui/card/CardTitle.astro";
+import Input from "@/components/ui/input/Input.astro";
+
+const RUN_MODES = ["all", "dev", "production", "frontend"];
+---
+
+<form id="run-tests-form" class="flex flex-col gap-4">
+  <Card>
+    <CardHeader>
+      <CardTitle>Run tests</CardTitle>
+      <CardDescription>
+        Start a CCCdashboard check run in the background. One run at a time;
+        results appear on the test results page once saved.
+      </CardDescription>
+      <CardAction>
+        <Button
+          id="start-run-button"
+          type="submit"
+          form="run-tests-form"
+          size="sm"
+        >
+          <Icon
+            name="loader-circle"
+            class="hidden animate-spin"
+            data-icon="inline-start"
+            data-loading-icon
+          />
+          <Icon name="play" data-icon="inline-start" data-idle-icon />
+          <span data-submit-label>Start run</span>
+        </Button>
+      </CardAction>
+    </CardHeader>
+    <CardContent class="flex flex-col gap-5">
+      <div class="flex flex-col gap-1.5">
+        <span class="text-sm font-medium">Mode</span>
+        <div
+          role="radiogroup"
+          aria-label="Test mode"
+          class="flex flex-wrap gap-1.5"
+        >
+          <input type="hidden" name="mode" value="dev" data-mode-value />
+          {
+            RUN_MODES.map((mode) => (
+              <button
+                type="button"
+                role="radio"
+                aria-checked={mode === "dev" ? "true" : "false"}
+                data-mode={mode}
+                class:list={[
+                  "rounded-lg border px-3 py-1 text-sm transition-colors disabled:opacity-50",
+                  mode === "dev"
+                    ? "border-primary bg-primary text-primary-foreground"
+                    : "bg-transparent text-muted-foreground hover:bg-muted hover:text-foreground",
+                ]}
+              >
+                {mode}
+              </button>
+            ))
+          }
+        </div>
+        <span class="text-xs text-muted-foreground">
+          &ldquo;all&rdquo; runs dev, production and frontend one after another.
+        </span>
+      </div>
+
+      <div class="grid gap-4 sm:grid-cols-2">
+        <label class="flex flex-col gap-1.5">
+          <span class="text-sm font-medium"
+            >Client ID<span class="text-destructive"> *</span></span
+          >
+          <Input name="clientId" placeholder="client" required />
+        </label>
+        <label class="flex flex-col gap-1.5">
+          <span class="text-sm font-medium"
+            >Clinic ID<span class="text-destructive"> *</span></span
+          >
+          <Input name="clinicId" placeholder="clinic" required />
+        </label>
+        <label class="flex flex-col gap-1.5">
+          <span class="text-sm font-medium"
+            >Execution ID<span class="text-destructive"> *</span></span
+          >
+          <Input name="executionId" placeholder="execution" required />
+        </label>
+        <label class="flex flex-col gap-1.5">
+          <span class="text-sm font-medium"
+            >Execution sheet<span class="text-destructive"> *</span></span
+          >
+          <Input name="executionSheet" placeholder="2026-08-28" required />
+        </label>
+      </div>
+
+      <div class="flex flex-col gap-4 border-t pt-4">
+        <div class="flex flex-col gap-1">
+          <h2 class="text-sm font-medium">Advanced options</h2>
+          <p class="text-xs text-muted-foreground">
+            Optional. Left empty, the CLI defaults from the environment apply.
+          </p>
+        </div>
+        <div class="grid gap-4 sm:grid-cols-2">
+          <label class="flex flex-col gap-1.5">
+            <span class="text-sm font-medium">Base URL</span>
+            <Input name="baseUrl" placeholder="https://dashboard.example.com" />
+          </label>
+          <label class="flex flex-col gap-1.5">
+            <span class="text-sm font-medium">API base URL</span>
+            <Input name="apiBaseUrl" placeholder="https://api.example.com" />
+          </label>
+          <label class="flex flex-col gap-1.5">
+            <span class="text-sm font-medium">Dev API base URL</span>
+            <Input name="devApiBaseUrl" />
+          </label>
+          <label class="flex flex-col gap-1.5">
+            <span class="text-sm font-medium">Production API base URL</span>
+            <Input name="productionApiBaseUrl" />
+          </label>
+          <label class="flex flex-col gap-1.5">
+            <span class="text-sm font-medium">Route</span>
+            <Input name="route" placeholder="/dashboard" />
+          </label>
+          <label class="flex flex-col gap-1.5">
+            <span class="text-sm font-medium">Playwright arguments</span>
+            <Input
+              name="playwrightArguments"
+              placeholder="--headed"
+              aria-describedby="playwright-arguments-hint"
+            />
+            <span
+              id="playwright-arguments-hint"
+              class="text-xs text-muted-foreground"
+            >
+              Space-separated, e.g. --headed --grep=login
+            </span>
+          </label>
+        </div>
+      </div>
+
+      <Alert data-run-status="started" class="hidden">
+        <Icon name="check-circle" />
+        <AlertTitle>Run started</AlertTitle>
+        <AlertDescription>
+          Run ID <code
+            data-run-id
+            class="rounded bg-muted px-1 py-0.5 font-mono text-xs"></code>.
+          Results appear on the <a href="/tests">test results page</a> once the run
+          finishes.
+        </AlertDescription>
+      </Alert>
+
+      <Alert data-run-status="error" variant="destructive" class="hidden">
+        <Icon name="circle-alert" />
+        <AlertTitle>Could not start the run</AlertTitle>
+        <AlertDescription data-run-error />
+      </Alert>
+    </CardContent>
+  </Card>
+</form>
+
+<script>
+  import { actions } from "astro:actions";
+
+  const form = document.querySelector("#run-tests-form");
+  const modeValue = form?.querySelector("[data-mode-value]");
+  const startButton = form?.querySelector("#start-run-button");
+  const submitLabel = form?.querySelector("[data-submit-label]");
+  const idleIcon = form?.querySelector("[data-idle-icon]");
+  const loadingIcon = form?.querySelector("[data-loading-icon]");
+  const statusElements = form?.querySelectorAll("[data-run-status]");
+  const runIdElement = form?.querySelector("[data-run-id]");
+  const errorElement = form?.querySelector("[data-run-error]");
+  const modeButtons = form?.querySelectorAll("[data-mode]");
+
+  const optionalFieldNames = [
+    "clientId",
+    "clinicId",
+    "executionId",
+    "executionSheet",
+    "baseUrl",
+    "apiBaseUrl",
+    "devApiBaseUrl",
+    "productionApiBaseUrl",
+    "route",
+  ];
+
+  const setStatus = (kind, message = "") => {
+    statusElements?.forEach((element) => {
+      element.classList.toggle("hidden", element.dataset.runStatus !== kind);
+    });
+    if (kind === "started" && runIdElement) {
+      runIdElement.textContent = message;
+    }
+    if (kind === "error" && errorElement) {
+      errorElement.textContent = message;
+    }
+  };
+
+  const setSubmitting = (submitting) => {
+    if (startButton) {
+      startButton.disabled = submitting;
+    }
+    form?.querySelectorAll("input").forEach((input) => {
+      input.disabled = submitting;
+    });
+    modeButtons?.forEach((button) => {
+      button.disabled = submitting;
+    });
+    if (submitLabel) {
+      submitLabel.textContent = submitting ? "Starting…" : "Start run";
+    }
+    idleIcon?.classList.toggle("hidden", submitting);
+    loadingIcon?.classList.toggle("hidden", !submitting);
+  };
+
+  const buildPayload = (formData) => {
+    const rawMode = formData.get("mode");
+    const mode =
+      rawMode === "all" || rawMode === "production" || rawMode === "frontend"
+        ? rawMode
+        : "dev";
+    const payload = { mode };
+
+    optionalFieldNames.forEach((name) => {
+      const value = formData.get(name);
+      if (typeof value === "string" && value.trim().length > 0) {
+        payload[name] = value.trim();
+      }
+    });
+
+    const playwrightArguments = String(
+      formData.get("playwrightArguments") ?? "",
+    )
+      .trim()
+      .split(/\s+/)
+      .filter((argument) => argument.length > 0);
+    if (playwrightArguments.length > 0) {
+      payload.playwrightArguments = playwrightArguments;
+    }
+
+    return payload;
+  };
+
+  modeButtons?.forEach((button) => {
+    button.addEventListener("click", () => {
+      const mode = button.dataset.mode;
+      if (!mode || !modeValue) {
+        return;
+      }
+      modeValue.value = mode;
+      modeButtons.forEach((candidate) => {
+        const selected = candidate === button;
+        candidate.setAttribute("aria-checked", String(selected));
+        candidate.classList.toggle("border-primary", selected);
+        candidate.classList.toggle("bg-primary", selected);
+        candidate.classList.toggle("text-primary-foreground", selected);
+        candidate.classList.toggle("bg-transparent", !selected);
+        candidate.classList.toggle("text-muted-foreground", !selected);
+      });
+    });
+  });
+
+  form?.addEventListener("submit", async (event) => {
+    event.preventDefault();
+    setStatus(null);
+    const payload = buildPayload(new FormData(form));
+    setSubmitting(true);
+
+    try {
+      const result = await actions.runTests(payload);
+      if (result.error) {
+        setStatus("error", result.error.message);
+        return;
+      }
+      setStatus("started", result.data.runId);
+    } catch {
+      setStatus(
+        "error",
+        "Could not reach the server. Check that the dashboard is running.",
+      );
+    } finally {
+      setSubmitting(false);
+    }
+  });
+</script>

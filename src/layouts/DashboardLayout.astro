@@ -1,9 +1,9 @@
 ---
 import "@/styles/global.css";
-import { AppSidebar } from "@/components/app-sidebar";
+import AppHeader from "@/components/AppHeader.astro";
 
-/** @type {{ title: string; headerTitle?: string }} */
-const { title, headerTitle = "Dashboard" } = Astro.props;
+/** @type {{ title: string }} */
+const { title } = Astro.props;
 ---
 
 <!doctype html>
@@ -17,7 +17,7 @@ const { title, headerTitle = "Dashboard" } = Astro.props;
     <title>{title}</title>
     <script is:inline>
       // Applies the persisted theme before first paint to avoid a flash.
-      // Storage key must stay in sync with app-sidebar.tsx.
+      // Storage key must stay in sync with AppHeader.astro.
       (() => {
         try {
           const stored = window.localStorage.getItem("ccc-theme");
@@ -35,12 +35,8 @@ const { title, headerTitle = "Dashboard" } = Astro.props;
     </script>
   </head>
   <body>
-    <AppSidebar
-      client:load
-      pathname={Astro.url.pathname}
-      headerTitle={headerTitle}
-    >
+    <AppHeader pathname={Astro.url.pathname}>
       <slot />
-    </AppSidebar>
+    </AppHeader>
   </body>
 </html>

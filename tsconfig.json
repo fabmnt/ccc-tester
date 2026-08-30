@@ -5,8 +5,6 @@
   "compilerOptions": {
     "paths": {
       "@/*": ["./src/*"]
-    },
-    "jsx": "preserve",
-    "jsxImportSource": "react"
+    }
   }
 }

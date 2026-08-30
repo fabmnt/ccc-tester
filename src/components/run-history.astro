@@ -1,32 +1,25 @@
 ---
-import {
-  ChevronRightIcon,
-  CircleCheckIcon,
-  CircleXIcon,
-  TriangleAlertIcon,
-} from "lucide-react";
-import { Badge } from "@/components/ui/badge";
-import {
-  Card,
-  CardAction,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import Icon from "@/components/Icon.astro";
+import Badge from "@/components/ui/badge/Badge.astro";
+import Card from "@/components/ui/card/Card.astro";
+import CardAction from "@/components/ui/card/CardAction.astro";
+import CardContent from "@/components/ui/card/CardContent.astro";
+import CardDescription from "@/components/ui/card/CardDescription.astro";
+import CardHeader from "@/components/ui/card/CardHeader.astro";
+import CardTitle from "@/components/ui/card/CardTitle.astro";
 import { formatDateTime, formatDuration, timeAgo } from "@/lib/format";
 
 const { runs, checksByRun, passRate } = Astro.props;
 ---
 
 <section aria-labelledby="run-history-heading">
-  <Card className="gap-0 py-0">
-    <CardHeader className="border-b px-5 py-5 md:px-6">
+  <Card class="gap-0 py-0">
+    <CardHeader class="border-b px-5 py-5 md:px-6">
       <div>
         <CardTitle>
           <h2 id="run-history-heading">Run history</h2>
         </CardTitle>
-        <CardDescription className="mt-1">
+        <CardDescription class="mt-1">
           Expand a run to inspect every check. Showing the newest runs first.
         </CardDescription>
       </div>
@@ -40,7 +33,7 @@ const { runs, checksByRun, passRate } = Astro.props;
       </CardAction>
     </CardHeader>
 
-    <CardContent className="px-0 py-0">
+    <CardContent class="px-0 py-0">
       {
         runs.length > 0 ? (
           runs.map((run, index) => {
@@ -59,7 +52,11 @@ const { runs, checksByRun, passRate } = Astro.props;
                 ? "outline"
                 : runFailed
                   ? "destructive"
-                  : "success";
+                  : "secondary";
+            const runBadgeClass =
+              !runFailed && run.checks > 0
+                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+                : undefined;
 
             return (
               <details
@@ -79,11 +76,23 @@ const { runs, checksByRun, passRate } = Astro.props;
                       ]}
                     >
                       {run.checks === 0 ? (
-                        <TriangleAlertIcon class="size-4" aria-hidden="true" />
+                        <Icon
+                          name="triangle-alert"
+                          class="size-4"
+                          aria-hidden="true"
+                        />
                       ) : runFailed ? (
-                        <CircleXIcon class="size-4" aria-hidden="true" />
+                        <Icon
+                          name="circle-x"
+                          class="size-4"
+                          aria-hidden="true"
+                        />
                       ) : (
-                        <CircleCheckIcon class="size-4" aria-hidden="true" />
+                        <Icon
+                          name="check-circle"
+                          class="size-4"
+                          aria-hidden="true"
+                        />
                       )}
                     </span>
                     <span class="min-w-0 flex-1">
@@ -92,7 +101,7 @@ const { runs, checksByRun, passRate } = Astro.props;
                           Run {run.runId.slice(0, 8)}
                         </span>
                         {index === 0 && <Badge variant="outline">Latest</Badge>}
-                        <Badge variant={runBadgeVariant}>
+                        <Badge variant={runBadgeVariant} class={runBadgeClass}>
                           {run.checks === 0
                             ? "No checks"
                             : runFailed
@@ -152,7 +161,8 @@ const { runs, checksByRun, passRate } = Astro.props;
                         duration
                       </div>
                     </div>
-                    <ChevronRightIcon
+                    <Icon
+                      name="chevron-right"
                       class="size-4 shrink-0 text-muted-foreground transition-transform group-open:rotate-90"
                       aria-hidden="true"
                     />
@@ -178,12 +188,14 @@ const { runs, checksByRun, passRate } = Astro.props;
                             class="group flex min-w-0 items-center gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-muted/60"
                           >
                             {check.status === "passed" ? (
-                              <CircleCheckIcon
+                              <Icon
+                                name="check-circle"
                                 class="size-4 shrink-0 text-emerald-500"
                                 aria-hidden="true"
                               />
                             ) : (
-                              <CircleXIcon
+                              <Icon
+                                name="circle-x"
                                 class="size-4 shrink-0 text-destructive"
                                 aria-hidden="true"
                               />
@@ -201,7 +213,8 @@ const { runs, checksByRun, passRate } = Astro.props;
                                 {formatDuration(check.durationMs)}
                               </span>
                               <Badge variant="outline">{check.mode}</Badge>
-                              <ChevronRightIcon
+                              <Icon
+                                name="chevron-right"
                                 class="size-4 text-muted-foreground transition-transform group-hover:translate-x-0.5"
                                 aria-hidden="true"
                               />

@@ -1,0 +1,88 @@
+---
+import Icon from "@/components/Icon.astro";
+import Button from "@/components/ui/button/Button.astro";
+
+const { pathname } = Astro.props;
+const isTestsActive = pathname === "/tests" || pathname.startsWith("/tests/");
+const isRunActive = pathname === "/run" || pathname.startsWith("/run/");
+
+const navLinkClasses =
+  "rounded-md px-3 py-1.5 text-sm transition-colors hover:bg-muted hover:text-foreground";
+---
+
+<div class="flex min-h-svh flex-col bg-background">
+  <header class="shrink-0 border-b">
+    <div
+      class="mx-auto flex h-14 w-full max-w-7xl items-center gap-5 px-4 lg:px-6"
+    >
+      <a href="/tests" class="shrink-0 text-sm font-semibold tracking-tight">
+        CCC Tester
+      </a>
+      <nav aria-label="Primary" class="flex items-center gap-1">
+        <a
+          href="/tests"
+          class:list={[
+            navLinkClasses,
+            isTestsActive
+              ? "bg-muted font-medium text-foreground"
+              : "text-muted-foreground",
+          ]}
+          aria-current={isTestsActive ? "page" : undefined}
+        >
+          Tests results
+        </a>
+        <a
+          href="/run"
+          class:list={[
+            navLinkClasses,
+            isRunActive
+              ? "bg-muted font-medium text-foreground"
+              : "text-muted-foreground",
+          ]}
+          aria-current={isRunActive ? "page" : undefined}
+        >
+          Run tests
+        </a>
+      </nav>
+      <Button
+        variant="ghost"
+        size="icon-sm"
+        class="ml-auto"
+        data-theme-toggle
+        aria-label="Toggle dark mode"
+        title="Toggle dark mode"
+      >
+        <Icon name="moon" data-theme-icon="light" />
+        <Icon name="sun" class="hidden" data-theme-icon="dark" />
+      </Button>
+    </div>
+  </header>
+
+  <main class="mx-auto flex w-full max-w-7xl flex-1 flex-col gap-4 p-4 lg:p-6">
+    <slot />
+  </main>
+</div>
+
+<script>
+  const THEME_STORAGE_KEY = "ccc-theme";
+
+  const updateThemeIcons = () => {
+    const isDark = document.documentElement.classList.contains("dark");
+    document.querySelectorAll("[data-theme-icon]").forEach((icon) => {
+      icon.classList.toggle(
+        "hidden",
+        icon.dataset.themeIcon !== (isDark ? "dark" : "light"),
+      );
+    });
+  };
+
+  updateThemeIcons();
+  document.querySelectorAll("[data-theme-toggle]").forEach((control) => {
+    control.addEventListener("click", () => {
+      const isDark = document.documentElement.classList.toggle("dark");
+      document.documentElement.style.colorScheme = isDark ? "dark" : "light";
+      window.localStorage.setItem(THEME_STORAGE_KEY, isDark ? "dark" : "light");
+      updateThemeIcons();
+    });
+  });
+</script>
