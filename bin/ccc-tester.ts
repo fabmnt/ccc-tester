@@ -8,6 +8,7 @@ function printHelp(): void {
 
 Options:
   --mode <dev|production|frontend|all>  Target environment (default: dev)
+  --access-token <token>                Dashboard access token
   --client-id <id>                     Dashboard client ID
   --clinic-id <id>                     Dashboard clinic ID
   --execution-id <id>                  Execution tab/room ID

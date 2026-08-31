@@ -5,6 +5,7 @@ import { TEST_SCOPES } from "../../convex/validators.js";
 export const runRequestSchema = z
   .object({
     mode: z.enum(MODES).optional(),
+    accessToken: z.string().optional(),
     clientId: z.string().optional(),
     clinicId: z.string().optional(),
     executionId: z.string().optional(),

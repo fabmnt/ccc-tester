@@ -101,6 +101,23 @@ const RUN_MODES = ["all", "dev", "production", "frontend"];
         </label>
       </div>
 
+      <div class="flex flex-col gap-1.5 border-t pt-4">
+        <label class="flex flex-col gap-1.5 sm:max-w-xl">
+          <span class="text-sm font-medium">Access token</span>
+          <Input
+            name="accessToken"
+            type="password"
+            placeholder="Dashboard access token"
+            autocomplete="off"
+            aria-describedby="access-token-hint"
+          />
+          <span id="access-token-hint" class="text-xs text-muted-foreground">
+            Optional if the server has TEST_ACCESS_TOKEN or username/password
+            credentials configured.
+          </span>
+        </label>
+      </div>
+
       <div class="flex flex-col gap-4 border-t pt-4">
         <div class="flex flex-col gap-1">
           <h2 class="text-sm font-medium">Advanced options</h2>
@@ -191,6 +208,7 @@ const RUN_MODES = ["all", "dev", "production", "frontend"];
   >;
 
   const optionalFieldNames = [
+    "accessToken",
     "clientId",
     "clinicId",
     "executionId",

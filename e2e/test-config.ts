@@ -13,6 +13,8 @@ export type TestMode = Exclude<Mode, "all">;
 export interface E2eSettings {
   accessToken: string;
   apiBaseUrl: string;
+  password: string;
+  username: string;
   clientId: string;
   clinicId: string;
   executionId: string;
@@ -27,6 +29,7 @@ const DEFAULT_DEV_URL = "http://127.0.0.1:4200";
 const DEFAULT_PRODUCTION_URL = "https://controlcentralcarrier.com";
 const DEFAULT_DEV_API_URL = "https://dev-carrier.dentalautomation.ai/";
 const DEFAULT_PRODUCTION_API_URL = "https://carriers.dentalautomation.ai/";
+export const TEST_RUN_ARGUMENTS_ENV = "CCC_TEST_RUN_ARGUMENTS";
 
 let environmentLoaded = false;
 
@@ -45,9 +48,37 @@ export function loadE2eEnvironment(): void {
   environmentLoaded = true;
 }
 
+export function getRuntimeCliArguments(): CliArguments {
+  const serializedArguments = process.env[TEST_RUN_ARGUMENTS_ENV];
+  if (!serializedArguments) {
+    return parseCliArguments(process.argv.slice(2));
+  }
+
+  let forwardedArguments: unknown;
+  try {
+    forwardedArguments = JSON.parse(serializedArguments);
+  } catch (error) {
+    throw new Error(
+      `${TEST_RUN_ARGUMENTS_ENV} must contain a JSON array of CLI arguments.`,
+      { cause: error },
+    );
+  }
+
+  if (
+    !Array.isArray(forwardedArguments) ||
+    forwardedArguments.some((argument) => typeof argument !== "string")
+  ) {
+    throw new Error(
+      `${TEST_RUN_ARGUMENTS_ENV} must contain a JSON array of CLI arguments.`,
+    );
+  }
+
+  return parseCliArguments(forwardedArguments);
+}
+
 export function getTestMode(): TestMode {
   loadE2eEnvironment();
-  const mode = parseCliArguments(process.argv.slice(2)).mode;
+  const mode = getRuntimeCliArguments().mode;
 
   if (mode !== "all") {
     return mode;
@@ -58,8 +89,7 @@ export function getTestMode(): TestMode {
 
 export function getTargetUrl(
   mode: TestMode,
-  baseUrl: string | undefined = parseCliArguments(process.argv.slice(2))
-    .baseUrl,
+  baseUrl: string | undefined = getRuntimeCliArguments().baseUrl,
 ): string {
   if (baseUrl) {
     return baseUrl;
@@ -77,7 +107,7 @@ export function getTargetUrl(
 
 export function getTestSettings(mode: TestMode = getTestMode()): E2eSettings {
   loadE2eEnvironment();
-  const argumentsValue = parseCliArguments(process.argv.slice(2));
+  const argumentsValue = getRuntimeCliArguments();
 
   const missingArguments = [
     ["--client-id", argumentsValue.clientId],
@@ -87,19 +117,25 @@ export function getTestSettings(mode: TestMode = getTestMode()): E2eSettings {
   ]
     .filter(([, value]) => !value?.trim())
     .map(([name]) => name);
-  const missingEnvironmentVariables = ["TEST_ACCESS_TOKEN"].filter(
-    (name) => !process.env[name]?.trim(),
-  );
+  const accessToken =
+    argumentsValue.accessToken?.trim() ||
+    process.env["TEST_ACCESS_TOKEN"]?.trim() ||
+    "";
+  const username = process.env["USERNAME"]?.trim() ?? "";
+  const password = process.env["PASSWORD"]?.trim() ?? "";
+  const missingEnvironmentVariables =
+    accessToken || (username && password)
+      ? []
+      : ["TEST_ACCESS_TOKEN or USERNAME/PASSWORD"];
 
   if (missingArguments.length > 0 || missingEnvironmentVariables.length > 0) {
     throw new Error(
       `Missing ${[...missingArguments, ...missingEnvironmentVariables].join(
         ", ",
-      )}. Pass test values as CLI arguments and set TEST_ACCESS_TOKEN in ${ENV_FILE_NAME} or the environment.`,
+      )}. Pass test values as CLI arguments and set credentials in ${ENV_FILE_NAME} or the environment.`,
     );
   }
 
-  const accessToken = process.env["TEST_ACCESS_TOKEN"]?.trim() ?? "";
   const clientId = argumentsValue.clientId?.trim() ?? "";
   const clinicId = argumentsValue.clinicId?.trim() ?? "";
   const executionId = argumentsValue.executionId?.trim() ?? "";
@@ -110,6 +146,8 @@ export function getTestSettings(mode: TestMode = getTestMode()): E2eSettings {
     accessToken,
     apiBaseUrl: ensureTrailingSlash(apiBaseUrl),
     clientId,
+    password,
+    username,
     clinicId,
     executionId,
     mode,

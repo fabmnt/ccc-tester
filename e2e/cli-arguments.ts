@@ -5,6 +5,7 @@ export type Mode = (typeof MODES)[number];
 export type ExecutableMode = Exclude<Mode, "all">;
 
 export interface CliArguments {
+  accessToken: string | undefined;
   apiBaseUrl: string | undefined;
   baseUrl: string | undefined;
   clientId: string | undefined;
@@ -25,6 +26,7 @@ const BOOLEAN_OPTIONS = new Set(["save-results"]);
 
 export function parseCliArguments(argumentsList: string[]): CliArguments {
   let mode: string = "dev";
+  let accessToken: string | undefined;
   let apiBaseUrl: string | undefined;
   let baseUrl: string | undefined;
   let clientId: string | undefined;
@@ -63,6 +65,9 @@ export function parseCliArguments(argumentsList: string[]): CliArguments {
       }
 
       switch (option) {
+        case "access-token":
+          accessToken = value;
+          break;
         case "api-base-url":
           apiBaseUrl = value;
           break;
@@ -119,6 +124,7 @@ export function parseCliArguments(argumentsList: string[]): CliArguments {
   }
 
   return {
+    accessToken,
     apiBaseUrl,
     baseUrl,
     clientId,
@@ -142,6 +148,7 @@ export function getForwardedArguments(
 ): string[] {
   const forwardedArguments = ["--mode", mode, "--scope", argumentsValue.scope];
   const options: Array<[string, string | undefined]> = [
+    ["--access-token", argumentsValue.accessToken],
     ["--api-base-url", argumentsValue.apiBaseUrl],
     ["--base-url", argumentsValue.baseUrl],
     ["--client-id", argumentsValue.clientId],
@@ -173,6 +180,7 @@ function getOption(argument: string | undefined): string | undefined {
   }
 
   const optionNames = [
+    "access-token",
     "api-base-url",
     "base-url",
     "client-id",

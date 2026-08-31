@@ -1,14 +1,14 @@
 import { defineConfig, devices } from "@playwright/test";
 import {
+  getRuntimeCliArguments,
   getTargetUrl,
   getTestMode,
   loadE2eEnvironment,
 } from "./e2e/test-config";
-import { parseCliArguments } from "./e2e/cli-arguments";
 
 loadE2eEnvironment();
 const mode = getTestMode();
-const argumentsValue = parseCliArguments(process.argv.slice(2));
+const argumentsValue = getRuntimeCliArguments();
 const reportFile = `test-results/${mode}.json`;
 
 export default defineConfig({

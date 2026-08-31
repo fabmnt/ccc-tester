@@ -8,7 +8,11 @@ import {
   type ExecutableMode,
   type Mode,
 } from "../../e2e/cli-arguments.js";
-import { getTargetUrl, loadE2eEnvironment } from "../../e2e/test-config.js";
+import {
+  getTargetUrl,
+  loadE2eEnvironment,
+  TEST_RUN_ARGUMENTS_ENV,
+} from "../../e2e/test-config.js";
 import type { TestScope } from "../../convex/validators.js";
 import { saveTestResultsToConvex } from "./convex-report.js";
 
@@ -28,6 +32,7 @@ export interface TestRunOptions {
 /** Structured equivalent of the ccc-tester CLI options; see bin/ccc-tester.ts --help. */
 export interface TestRunRequest {
   mode?: Mode;
+  accessToken?: string;
   clientId?: string;
   clinicId?: string;
   executionId?: string;
@@ -74,6 +79,7 @@ export function buildCliArguments(request: TestRunRequest): string[] {
   };
 
   pushOption("--mode", request.mode);
+  pushOption("--access-token", request.accessToken);
   pushOption("--client-id", request.clientId);
   pushOption("--clinic-id", request.clinicId);
   pushOption("--execution-id", request.executionId);
@@ -221,12 +227,11 @@ function runPlaywright(
 ): Promise<number> {
   const require = createRequire(import.meta.url);
   const playwrightCliPath = require.resolve("@playwright/test/cli");
+  const forwardedArguments = getForwardedArguments(argumentsValue, mode);
   const childArguments = [
     playwrightCliPath,
     "test",
     ...argumentsValue.playwrightArguments,
-    "--",
-    ...getForwardedArguments(argumentsValue, mode),
   ];
 
   console.log(
@@ -235,7 +240,10 @@ function runPlaywright(
 
   return new Promise((resolvePromise, rejectPromise) => {
     const child = spawn(process.execPath, childArguments, {
-      env: process.env,
+      env: {
+        ...process.env,
+        [TEST_RUN_ARGUMENTS_ENV]: JSON.stringify(forwardedArguments),
+      },
       stdio: "inherit",
     });
 

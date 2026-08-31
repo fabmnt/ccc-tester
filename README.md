@@ -1,8 +1,9 @@
 # CCC Tester
 
-CCC Tester runs Playwright checks against the CCCdashboard project. The current smoke test opens the classic
-`/#/executions/:clientId` route, loads one configured sheet, and verifies that the page renders without sending a
-data mutation.
+CCC Tester runs Playwright checks against the CCCdashboard project. The executions suite opens the classic
+`/#/executions/:clientId` route, exercises sheet navigation, cell editing, filters, file links, and row actions, and
+restores values it changes. It uses only the `Carriers Testing` client and requires real dev or production API
+requests; frontend mock mode skips this suite.
 
 CCCdashboard must be running separately for local modes. The CLI does not start or stop it.
 
@@ -11,14 +12,20 @@ CCCdashboard must be running separately for local modes. The CLI does not start 
 Create `.env.e2e` in this project. It is ignored by Git:
 
 ```dotenv
+# Use either an access token or the username/password pair. An access token
+# can also be passed as --access-token to the CLI or as accessToken in the
+# Astro action/API payload.
 TEST_ACCESS_TOKEN=your-dashboard-access-token
+USERNAME=your-dashboard-username
+PASSWORD=your-dashboard-password
 ```
 
-`TEST_ACCESS_TOKEN` is the value stored by CCCdashboard as `tokens` in browser local storage. The current dashboard
-implementation uses an access token, not a username/password login, for this setup.
+`TEST_ACCESS_TOKEN` is the value stored by CCCdashboard as `tokens` in browser local storage. You can also set
+`USERNAME` and `PASSWORD`; the e2e suite obtains a short-lived access token from the dashboard auth service when
+`TEST_ACCESS_TOKEN` is not set.
 
 Client, clinic, execution, and sheet values are provided as CLI arguments when running the checks. The only
-configuration values read from the environment are the access token and the optional dev/production dashboard URLs.
+configuration values read from the environment are fallback credentials and the optional dev/production dashboard URLs.
 
 Optional values:
 
@@ -27,9 +34,10 @@ CCC_DEV_URL=http://127.0.0.1:4200
 CCC_PRODUCTION_URL=https://controlcentralcarrier.com
 ```
 
-The sheet should contain at least one row for the real dev and production checks. In the dashboard code, the route
-parameter is a client ID; the execution ID identifies the selected execution tab/room and is used by the mocked
-frontend check.
+The configured client must be `Carriers Testing`, and the configured clinic must be the Carrier testing clinic.
+The configured sheet and at least one other sheet should each contain a data row for the real dev and production
+checks. In the dashboard code, the route parameter is a client ID and the execution ID identifies the selected
+execution tab/room.
 
 Install Chromium once:
 
@@ -52,13 +60,17 @@ pnpm test:frontend:e2e -- --client-id=dashboard-client-id --clinic-id=dashboard-
   --execution-id=dashboard-execution-or-sheet-id --execution-sheet=2026-08-28
 pnpm test:e2e -- --mode=all --client-id=dashboard-client-id --clinic-id=dashboard-clinic-id \
   --execution-id=dashboard-execution-or-sheet-id --execution-sheet=2026-08-28
+pnpm test:e2e -- --access-token=your-dashboard-access-token --client-id=dashboard-client-id \
+  --clinic-id=dashboard-clinic-id --execution-id=dashboard-execution-or-sheet-id \
+  --execution-sheet=2026-08-28
 ```
 
 Modes use the following targets:
 
 - `dev`: local CCCdashboard dev server and real API requests.
 - `production`: `https://controlcentralcarrier.com` and real API requests.
-- `frontend`: local CCCdashboard dev server with dashboard API and sync endpoints mocked.
+- `frontend`: local CCCdashboard dev server with dashboard API and sync endpoints mocked. The real executions suite is
+  skipped in this mode.
 - `all`: runs all three modes sequentially.
 
 Use Playwright options after the mode, for example `--headed`, `--debug`, or `--grep executions`.
@@ -107,6 +119,7 @@ Set `CONVEX_WRITE_SECRET` in the Astro server environment. The JSON payload uses
 ```json
 {
   "mode": "all",
+  "accessToken": "your-dashboard-access-token",
   "clientId": "dashboard-client-id",
   "clinicId": "dashboard-clinic-id",
   "executionId": "dashboard-execution-or-sheet-id",

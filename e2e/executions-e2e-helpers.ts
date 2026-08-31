@@ -1,0 +1,397 @@
+import { expect, type Locator, type Page } from "@playwright/test";
+import type { E2eSettings } from "./test-config";
+
+export const EXPECTED_CLIENT_NAME = "Carriers Testing";
+export const EXPECTED_CLINIC_NAME_FRAGMENT = "carrier testing";
+export const LOADED_CONTENT_SELECTOR =
+  ".executions-rework-content-shell:not(.executions-rework-content-shell--loading)";
+
+const AUTH_LOGIN_URL = "https://carriers.dentalautomation.ai/api/v2/auth/login";
+const API_WRITE_PATH = "/api/spreadsheets/insert";
+const SPECIAL_COLUMN_PATTERN =
+  /drive|file|document|url|status|audit|carrier|practice|clinic|verification|relationship/i;
+
+export type TextEditor =
+  "double-click" | "enter" | "direct-entry" | "expanded" | "toolbar";
+
+export interface GridCellTarget {
+  cell: Locator;
+  columnIndex: number;
+  header: string;
+  originalValue: string;
+}
+
+interface RawTab {
+  _id?: string;
+  title?: string;
+}
+
+export async function authenticate(
+  page: Page,
+  settings: E2eSettings,
+): Promise<void> {
+  let accessToken = settings.accessToken;
+
+  if (!accessToken) {
+    const response = await page.request.post(AUTH_LOGIN_URL, {
+      data: {
+        username: settings.username,
+        password: settings.password,
+      },
+    });
+    if (!response.ok()) {
+      throw new Error(`Dashboard login failed with HTTP ${response.status()}.`);
+    }
+
+    accessToken = extractAccessToken(await response.json());
+    if (!accessToken) {
+      throw new Error(
+        "Dashboard login response did not include an access token.",
+      );
+    }
+  }
+
+  await page.addInitScript(
+    ({ token, apiBaseUrl }) => {
+      window.localStorage.setItem("tokens", token);
+      window.sessionStorage.setItem("BASE_API", apiBaseUrl);
+    },
+    { token: accessToken, apiBaseUrl: settings.apiBaseUrl },
+  );
+}
+
+export async function openExecutionsHome(
+  page: Page,
+  settings: E2eSettings,
+): Promise<void> {
+  await authenticate(page, settings);
+  const response = await page.goto("/#/executions", {
+    waitUntil: "domcontentloaded",
+  });
+  expect(response?.ok()).toBe(true);
+  await expect(
+    page.getByRole("heading", { name: "Welcome to Executions", exact: true }),
+  ).toBeVisible();
+}
+
+export async function openExecutionsClient(
+  page: Page,
+  settings: E2eSettings,
+): Promise<void> {
+  await authenticate(page, settings);
+
+  const clientResponsePromise = page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "GET" &&
+      url.origin === new URL(settings.apiBaseUrl).origin &&
+      url.pathname === `/api/clients/all/${settings.clientId}`
+    );
+  });
+  const tabsResponsePromise = page
+    .waitForResponse((response) => {
+      const url = new URL(response.url());
+      return (
+        response.request().method() === "GET" &&
+        url.origin === new URL(settings.apiBaseUrl).origin &&
+        url.pathname === "/api/spreadsheets/execution/tabs"
+      );
+    })
+    .catch(() => null);
+
+  const response = await page.goto(buildClientPath(settings), {
+    waitUntil: "domcontentloaded",
+  });
+  expect(response?.ok()).toBe(true);
+
+  const clientResponse = await clientResponsePromise;
+  await assertApiResponse(clientResponse, "client details");
+  const client = (await clientResponse.json()) as {
+    clientName?: string;
+    clinic?: Array<{ _id?: string; clinicName?: string }>;
+  };
+  expect(client.clientName).toBe(EXPECTED_CLIENT_NAME);
+
+  const selectedClinic = client.clinic?.find(
+    (clinic) => clinic._id === settings.clinicId,
+  );
+  expect(selectedClinic).toBeDefined();
+  expect(selectedClinic?.clinicName?.toLowerCase()).toContain(
+    EXPECTED_CLINIC_NAME_FRAGMENT,
+  );
+
+  const tabsResponse = await tabsResponsePromise;
+  if (!tabsResponse) {
+    throw new Error("The execution tabs request was not observed.");
+  }
+  await assertApiResponse(tabsResponse, "execution tabs");
+  const tabs = (await tabsResponse.json()) as RawTab[];
+  expect(tabs).toEqual(
+    expect.arrayContaining([
+      expect.objectContaining({
+        _id: settings.executionId,
+        title: settings.sheetName,
+      }),
+    ]),
+  );
+
+  await waitForGrid(page);
+}
+
+async function assertApiResponse(
+  response: {
+    ok(): boolean;
+    status(): number;
+    text(): Promise<string>;
+  },
+  resource: string,
+): Promise<void> {
+  if (response.ok()) return;
+
+  const body = await response
+    .text()
+    .then((text) => text.slice(0, 200))
+    .catch(() => "response body unavailable");
+
+  throw new Error(
+    `The ${resource} request failed with HTTP ${response.status()}: ${body}`,
+  );
+}
+
+export function buildClientPath(settings: E2eSettings): string {
+  const query = new URLSearchParams({
+    clinic: settings.clinicId,
+    sheet: settings.sheetName,
+  });
+  return `/#/executions/${encodeURIComponent(settings.clientId)}?${query.toString()}`;
+}
+
+export async function waitForGrid(page: Page): Promise<void> {
+  await expect(page.locator(LOADED_CONTENT_SELECTOR)).toHaveCount(1);
+  await expect(page.locator("executions-grid")).toHaveCount(1);
+  await expect(
+    page.locator("executions-grid .grid-viewport .grid-row").first(),
+  ).toBeVisible();
+}
+
+export function gridRows(page: Page): Locator {
+  return page.locator("executions-grid .grid-viewport .grid-row");
+}
+
+export function gridHeaders(page: Page): Locator {
+  return page.locator(
+    "executions-grid .grid-sticky-header > .grid-header-cell",
+  );
+}
+
+export function rowCells(row: Locator): Locator {
+  return row.locator("executions-cell");
+}
+
+export async function cellText(cell: Locator): Promise<string> {
+  const input = cell.locator("input.cell-input, textarea.cell-textarea");
+  if (await input.count()) {
+    return (await input.first().inputValue()).trim();
+  }
+  return (await cell.locator(".cell").first().innerText()).trim();
+}
+
+export async function getFirstTextCell(
+  page: Page,
+  options: { allowEmpty?: boolean } = {},
+): Promise<GridCellTarget> {
+  const row = gridRows(page).first();
+  const cells = rowCells(row);
+  const headers = gridHeaders(page);
+  const candidates: GridCellTarget[] = [];
+
+  for (let index = 0; index < (await cells.count()); index += 1) {
+    const header = (await headers.nth(index).innerText()).trim();
+    if (SPECIAL_COLUMN_PATTERN.test(header)) continue;
+
+    const cell = cells.nth(index);
+    const originalValue = await cellText(cell);
+    const candidate = { cell, columnIndex: index, header, originalValue };
+    candidates.push(candidate);
+    if (originalValue) return candidate;
+  }
+
+  if (options.allowEmpty && candidates.length > 0) {
+    return candidates[0];
+  }
+
+  throw new Error("The selected sheet has no ordinary text cell to edit.");
+}
+
+export async function getCellByHeader(
+  page: Page,
+  matcher: RegExp,
+): Promise<GridCellTarget | null> {
+  const row = gridRows(page).first();
+  const cells = rowCells(row);
+  const headers = gridHeaders(page);
+
+  for (let index = 0; index < (await headers.count()); index += 1) {
+    const header = (await headers.nth(index).innerText()).trim();
+    if (!matcher.test(header)) continue;
+
+    const cell = cells.nth(index);
+    return {
+      cell,
+      columnIndex: index,
+      header,
+      originalValue: await cellText(cell),
+    };
+  }
+
+  return null;
+}
+
+export async function selectCell(target: GridCellTarget): Promise<void> {
+  await target.cell.locator(".cell-container").click();
+  await expect(target.cell.locator(".cell-container")).toHaveClass(/selected/);
+}
+
+export async function setTextWithEditor(
+  page: Page,
+  settings: E2eSettings,
+  target: GridCellTarget,
+  value: string,
+  editor: TextEditor,
+): Promise<void> {
+  if ((await cellText(target.cell)) === value) return;
+
+  switch (editor) {
+    case "double-click":
+      await target.cell.locator(".cell-container").dblclick();
+      break;
+    case "enter":
+      await selectCell(target);
+      await page.keyboard.press("Enter");
+      break;
+    case "direct-entry":
+      await selectCell(target);
+      await page.keyboard.press(value.charAt(0));
+      break;
+    case "expanded":
+      await selectCell(target);
+      await page.keyboard.press("Control+Enter");
+      break;
+    case "toolbar":
+      await selectCell(target);
+      break;
+  }
+
+  const editorLocator =
+    editor === "expanded"
+      ? target.cell.locator("textarea.cell-textarea")
+      : editor === "toolbar"
+        ? page.locator('input[name="cell-value"]')
+        : target.cell.locator("input.cell-input");
+  await expect(editorLocator).toBeVisible();
+  await editorLocator.fill(value);
+
+  const writeResponsePromise = waitForCellWrite(page, settings);
+  await editorLocator.press("Enter");
+  await assertCellWriteFinished(page, target.cell, value, writeResponsePromise);
+}
+
+export function waitForCellWrite(
+  page: Page,
+  settings: E2eSettings,
+): Promise<unknown> {
+  return page.waitForResponse((response) => {
+    const url = new URL(response.url());
+    return (
+      response.request().method() === "POST" &&
+      url.origin === new URL(settings.apiBaseUrl).origin &&
+      url.pathname === API_WRITE_PATH
+    );
+  });
+}
+
+export async function assertCellWriteFinished(
+  page: Page,
+  cell: Locator,
+  expectedValue: string,
+  writeResponsePromise: Promise<unknown>,
+): Promise<void> {
+  const response = (await writeResponsePromise) as {
+    ok: () => boolean;
+  };
+  expect(response.ok()).toBe(true);
+  await expect(
+    page.locator("executions-grid .cell-container.loading"),
+  ).toHaveCount(0);
+  await expect(cell.locator(".cell")).toHaveText(expectedValue);
+}
+
+export async function restoreCellValue(
+  page: Page,
+  settings: E2eSettings,
+  target: GridCellTarget,
+): Promise<void> {
+  const currentValue = await cellText(target.cell);
+  if (currentValue === target.originalValue) return;
+  await setTextWithEditor(
+    page,
+    settings,
+    target,
+    target.originalValue,
+    "double-click",
+  );
+}
+
+export async function openCellDropdown(
+  page: Page,
+  target: GridCellTarget,
+): Promise<Locator> {
+  await selectCell(target);
+  await target.cell.locator(".cell").hover();
+  const actions = page.locator(".cell-actions-popover:visible").last();
+  await expect(actions).toBeVisible();
+  const toggle = actions.locator(".dropdown-toggle-button");
+  await expect(toggle).toBeVisible();
+  await toggle.click();
+
+  const menu = page.locator(".dropdown-menu:visible").last();
+  await expect(menu).toBeVisible();
+  return menu;
+}
+
+export async function waitForGridUpdates(page: Page): Promise<void> {
+  await expect(
+    page.locator("executions-grid .cell-container.loading"),
+  ).toHaveCount(0);
+}
+
+export async function readClipboard(page: Page): Promise<string> {
+  return page.evaluate(() => navigator.clipboard.readText());
+}
+
+export function createMarker(testId: string, purpose: string): string {
+  return `CCC_E2E_${testId.replace(/[^a-zA-Z0-9]/g, "_")}_${purpose}`;
+}
+
+export async function getRowNumber(row: Locator): Promise<number> {
+  const text = await row.locator(".grid-row-number-cell").first().innerText();
+  return Number.parseInt(text.trim(), 10);
+}
+
+function extractAccessToken(response: unknown, depth = 0): string {
+  if (depth > 3 || response === null || typeof response !== "object") return "";
+
+  for (const [key, value] of Object.entries(response)) {
+    if (/refresh/i.test(key)) continue;
+    if (
+      /token$/i.test(key) &&
+      typeof value === "string" &&
+      value.length >= 20
+    ) {
+      return value;
+    }
+    const nestedToken = extractAccessToken(value, depth + 1);
+    if (nestedToken) return nestedToken;
+  }
+  return "";
+}
