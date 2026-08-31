@@ -7,10 +7,21 @@ import CardContent from "@/components/ui/card/CardContent.astro";
 import CardHeader from "@/components/ui/card/CardHeader.astro";
 import Skeleton from "@/components/ui/skeleton/Skeleton.astro";
 import TestResultsContent from "@/components/test-results-content.astro";
+import { getActiveRun } from "@/lib/convex";
+
+const initialActiveRun = await getActiveRun();
+const initialActiveRunIsRunning = initialActiveRun?.status === "running";
 ---
 
 <Layout title="Test results">
-  <div class="flex flex-col gap-8">
+  <div
+    class="flex flex-col gap-8"
+    data-tests-live-state
+    data-active-run-id={initialActiveRunIsRunning ? initialActiveRun.runId : ""}
+    data-active-run-updated-at={initialActiveRunIsRunning
+      ? (initialActiveRun.updatedAt ?? initialActiveRun.startedAt)
+      : ""}
+  >
     <div class="flex flex-wrap items-end justify-between gap-4">
       <div class="flex min-w-0 flex-col gap-1.5">
         <div class="flex flex-wrap items-center gap-2.5">
@@ -120,3 +131,72 @@ import TestResultsContent from "@/components/test-results-content.astro";
     </TestResultsContent>
   </div>
 </Layout>
+
+<script>
+  const LIVE_RUN_POLL_INTERVAL_MS = 4_000;
+  const liveState = document.querySelector<HTMLElement>(
+    "[data-tests-live-state]",
+  );
+  const initialSnapshot = [
+    liveState?.dataset.activeRunId ?? "",
+    liveState?.dataset.activeRunUpdatedAt ?? "",
+  ].join(":");
+  let lastSnapshot = initialSnapshot;
+
+  const getActiveRunSnapshot = (payload: unknown): string => {
+    if (typeof payload !== "object" || payload === null) {
+      return "";
+    }
+
+    const run = (payload as { run?: unknown }).run;
+    if (typeof run !== "object" || run === null) {
+      return "";
+    }
+
+    const activeRun = run as {
+      runId?: unknown;
+      status?: unknown;
+      startedAt?: unknown;
+      updatedAt?: unknown;
+    };
+    if (activeRun.status !== "running" || typeof activeRun.runId !== "string") {
+      return "";
+    }
+
+    const updatedAt =
+      typeof activeRun.updatedAt === "number"
+        ? activeRun.updatedAt
+        : activeRun.startedAt;
+    return `${activeRun.runId}:${typeof updatedAt === "number" ? updatedAt : ""}`;
+  };
+
+  const refreshWhenRunChanges = async (): Promise<void> => {
+    try {
+      const response = await fetch("/api/runs/active", {
+        cache: "no-store",
+      });
+      if (!response.ok) {
+        return;
+      }
+
+      const snapshot = getActiveRunSnapshot(await response.json());
+      if (snapshot === lastSnapshot) {
+        return;
+      }
+
+      lastSnapshot = snapshot;
+      window.location.reload();
+    } catch {
+      // The next poll retries while the dashboard is temporarily unavailable.
+    }
+  };
+
+  void refreshWhenRunChanges();
+  const liveRunPoll = window.setInterval(
+    refreshWhenRunChanges,
+    LIVE_RUN_POLL_INTERVAL_MS,
+  );
+  window.addEventListener("pagehide", () => {
+    window.clearInterval(liveRunPoll);
+  });
+</script>

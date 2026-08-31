@@ -9,6 +9,7 @@ export const EXPECTED_CLIENT_NAME = TEST_CLIENT_NAME;
 export const EXPECTED_CLINIC_NAME_FRAGMENT = TEST_CLINIC_NAME.toLowerCase();
 export const LOADED_CONTENT_SELECTOR =
   ".executions-rework-content-shell:not(.executions-rework-content-shell--loading)";
+const POINTER_RESET_POSITION = { x: 0, y: 0 } as const;
 
 // This mirrors CCCdashboard's UsersService.login() endpoint. Authentication
 // happens through the API; the tests never navigate to the dashboard login page.
@@ -289,8 +290,23 @@ export async function getCellByHeader(
 }
 
 export async function selectCell(target: GridCellTarget): Promise<void> {
-  await target.cell.locator(".cell-container").click();
-  await expect(target.cell.locator(".cell-container")).toHaveClass(/selected/);
+  const page = target.cell.page();
+  const container = target.cell.locator(".cell-container");
+
+  // Grid updates can remount the selected cell beneath the pointer and reopen
+  // its hover actions. Dismiss that overlay before clicking the cell again.
+  await page.mouse.move(POINTER_RESET_POSITION.x, POINTER_RESET_POSITION.y);
+  await expect(page.locator(".cell-actions-popover:visible")).toHaveCount(0);
+  if (
+    await container.evaluate((element) =>
+      element.classList.contains("selected"),
+    )
+  ) {
+    return;
+  }
+
+  await container.click();
+  await expect(container).toHaveClass(/selected/);
 }
 
 export async function setTextWithEditor(
@@ -385,14 +401,40 @@ export async function restoreCellValue(
   );
 }
 
+export async function openCellActionsPopover(
+  page: Page,
+  target: GridCellTarget,
+): Promise<Locator> {
+  const cellContent = target.cell.locator(".cell");
+  await expect(cellContent).toBeVisible();
+  await cellContent.scrollIntoViewIfNeeded();
+
+  const cellBox = await cellContent.boundingBox();
+  if (!cellBox) {
+    throw new Error("Selected cell content has no visible bounding box.");
+  }
+
+  // Selecting a cell mounts the hover target beneath the current pointer.
+  // Move away first so the next real mouse move emits the target's mouseenter
+  // event. Locator.hover() cannot be used here because the popover it opens
+  // intercepts the same point while Playwright is checking actionability.
+  await page.mouse.move(POINTER_RESET_POSITION.x, POINTER_RESET_POSITION.y);
+  await page.mouse.move(
+    cellBox.x + cellBox.width / 2,
+    cellBox.y + cellBox.height / 2,
+  );
+
+  const actions = page.locator(".cell-actions-popover:visible").last();
+  await expect(actions).toBeVisible();
+  return actions;
+}
+
 export async function openCellDropdown(
   page: Page,
   target: GridCellTarget,
 ): Promise<Locator> {
   await selectCell(target);
-  await target.cell.locator(".cell").hover();
-  const actions = page.locator(".cell-actions-popover:visible").last();
-  await expect(actions).toBeVisible();
+  const actions = await openCellActionsPopover(page, target);
   const toggle = actions.locator(".dropdown-toggle-button");
   await expect(toggle).toBeVisible();
   await toggle.click();

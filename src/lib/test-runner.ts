@@ -14,7 +14,11 @@ import {
   TEST_RUN_ARGUMENTS_ENV,
 } from "../../e2e/test-config.js";
 import type { TestScope } from "../../convex/validators.js";
-import { saveTestResultsToConvex } from "./convex-report.js";
+import {
+  finishTestRunInConvex,
+  saveTestResultsToConvex,
+  startTestRunInConvex,
+} from "./convex-report.js";
 
 /** A test run request is already in progress; only one run may execute at a time. */
 export class RunAlreadyActiveError extends Error {}
@@ -141,8 +145,29 @@ async function executeRun(
   options: TestRunOptions,
 ): Promise<number> {
   activeRunId = prepared.runId;
+  const startedAt = Date.now();
+  const shouldTrackRun = prepared.argumentsValue.saveResults;
+  let exitCode = 1;
 
   try {
+    if (shouldTrackRun) {
+      try {
+        await startTestRunInConvex(
+          prepared.modes,
+          prepared.argumentsValue,
+          prepared.runId,
+          startedAt,
+          options,
+        );
+      } catch (error) {
+        console.error(
+          `Failed to start tracking run ${prepared.runId}: ${
+            error instanceof Error ? error.message : error
+          }`,
+        );
+      }
+    }
+
     const exitCodes = await Promise.all(
       prepared.modes.map(async (mode) => {
         let exitCode = 1;
@@ -178,9 +203,33 @@ async function executeRun(
       }),
     );
 
-    return exitCodes.find((exitCode) => exitCode !== 0) ?? 0;
+    exitCode = exitCodes.find((code) => code !== 0) ?? 0;
+    return exitCode;
   } finally {
+    if (shouldTrackRun) {
+      await finishTrackedRun(prepared.runId, exitCode, options);
+    }
     activeRunId = undefined;
+  }
+}
+
+async function finishTrackedRun(
+  runId: string,
+  exitCode: number,
+  options: TestRunOptions,
+): Promise<void> {
+  try {
+    await finishTestRunInConvex(
+      runId,
+      exitCode === 0 ? "passed" : "failed",
+      options,
+    );
+  } catch (error) {
+    console.error(
+      `Failed to finish tracking run ${runId}: ${
+        error instanceof Error ? error.message : error
+      }`,
+    );
   }
 }
 

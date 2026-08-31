@@ -20,8 +20,8 @@ const RUN_MODES = ["all", "dev", "production", "frontend"];
     <CardHeader>
       <CardTitle>Run tests</CardTitle>
       <CardDescription>
-        Start a CCCdashboard check run in the background. One run at a time;
-        results appear on the test results page once saved.
+        Start a CCCdashboard check run in the background. One run at a time; a
+        running row appears on the test results page as soon as the run starts.
       </CardDescription>
       <CardAction>
         <Button
@@ -118,8 +118,7 @@ const RUN_MODES = ["all", "dev", "production", "frontend"];
           Run ID <code
             data-run-id
             class="rounded bg-muted px-1 py-0.5 font-mono text-xs"></code>.
-          Results appear on the <a href="/tests">test results page</a> once the run
-          finishes.
+          Follow its progress on the <a href="/tests">test results page</a>.
         </AlertDescription>
       </Alert>
 

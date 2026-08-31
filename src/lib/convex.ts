@@ -16,6 +16,10 @@ export async function listRuns(): Promise<RunDoc[]> {
   return client.query(api.runChecks.listRuns);
 }
 
+export async function getActiveRun(): Promise<RunDoc | null> {
+  return client.query(api.runChecks.getActive);
+}
+
 export async function getRunCheck(id: string): Promise<RunCheckDoc | null> {
   return client.query(api.runChecks.getById, { id });
 }

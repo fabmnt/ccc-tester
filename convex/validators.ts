@@ -9,6 +9,14 @@ export const modeValidator = v.union(
 
 export type TestMode = Infer<typeof modeValidator>;
 
+export const runStatusValidator = v.union(
+  v.literal("running"),
+  v.literal("passed"),
+  v.literal("failed"),
+);
+
+export type RunStatus = Infer<typeof runStatusValidator>;
+
 export const TEST_SCOPES = ["execution"] as const;
 export type TestScope = (typeof TEST_SCOPES)[number];
 

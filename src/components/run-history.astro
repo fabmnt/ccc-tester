@@ -44,26 +44,40 @@ const { runs, checksByRun, passRate } = Astro.props as Props;
       {
         runs.length > 0 ? (
           runs.map((run, index) => {
-            const runFailed = run.passed < run.checks;
+            const runIsRunning = run.status === "running";
+            const runFailed =
+              run.status === "failed" ||
+              (!runIsRunning && run.passed < run.checks);
             const runPassRate =
               run.checks === 0
                 ? 0
                 : Math.round((run.passed / run.checks) * 100);
+            const runDurationMs = runIsRunning
+              ? Math.max(run.durationMs, Date.now() - run.startedAt)
+              : run.durationMs;
             const checks = checksByRun.get(run.runId) ?? [];
             const orderedChecks = [...checks].sort((a, b) => {
               if (a.status === b.status) return 0;
               return a.status === "failed" ? -1 : 1;
             });
             const runBadgeVariant =
-              run.checks === 0
+              runIsRunning || run.checks === 0
                 ? "outline"
                 : runFailed
                   ? "destructive"
                   : "secondary";
-            const runBadgeClass =
-              !runFailed && run.checks > 0
+            const runBadgeClass = runIsRunning
+              ? "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400"
+              : !runFailed && run.checks > 0
                 ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
                 : undefined;
+            const runStatusLabel = runIsRunning
+              ? "Running"
+              : runFailed
+                ? "Failed"
+                : run.checks === 0
+                  ? "No checks"
+                  : "Passed";
 
             return (
               <details
@@ -75,14 +89,22 @@ const { runs, checksByRun, passRate } = Astro.props as Props;
                     <span
                       class:list={[
                         "flex size-9 shrink-0 items-center justify-center rounded-lg",
-                        run.checks === 0
-                          ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
-                          : runFailed
-                            ? "bg-destructive/10 text-destructive"
-                            : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
+                        runIsRunning
+                          ? "bg-sky-500/10 text-sky-600 dark:text-sky-400"
+                          : run.checks === 0
+                            ? "bg-amber-500/10 text-amber-600 dark:text-amber-400"
+                            : runFailed
+                              ? "bg-destructive/10 text-destructive"
+                              : "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400",
                       ]}
                     >
-                      {run.checks === 0 ? (
+                      {runIsRunning ? (
+                        <Icon
+                          name="loader-circle"
+                          class="size-4 animate-spin"
+                          aria-hidden="true"
+                        />
+                      ) : run.checks === 0 ? (
                         <Icon
                           name="triangle-alert"
                           class="size-4"
@@ -109,11 +131,14 @@ const { runs, checksByRun, passRate } = Astro.props as Props;
                         </span>
                         {index === 0 && <Badge variant="outline">Latest</Badge>}
                         <Badge variant={runBadgeVariant} class={runBadgeClass}>
-                          {run.checks === 0
-                            ? "No checks"
-                            : runFailed
-                              ? "Failed"
-                              : "Passed"}
+                          {runIsRunning && (
+                            <Icon
+                              name="loader-circle"
+                              class="animate-spin"
+                              aria-hidden="true"
+                            />
+                          )}
+                          {runStatusLabel}
                         </Badge>
                       </span>
                       <span class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
@@ -122,6 +147,8 @@ const { runs, checksByRun, passRate } = Astro.props as Props;
                         </span>
                         <span aria-hidden="true">·</span>
                         <span>{run.modes.join(" · ")}</span>
+                        <span aria-hidden="true">·</span>
+                        <span class="truncate">{run.sheetName}</span>
                         {run.commitHash && (
                           <>
                             <span aria-hidden="true">·</span>
@@ -136,7 +163,11 @@ const { runs, checksByRun, passRate } = Astro.props as Props;
                     <div class="hidden w-28 shrink-0 flex-col gap-1.5 lg:flex">
                       <div
                         class="flex h-1.5 gap-0.5 overflow-hidden rounded-full bg-muted"
-                        aria-label={`${run.passed} of ${run.checks} checks passed`}
+                        aria-label={
+                          runIsRunning
+                            ? `${run.passed} of ${run.checks} checks completed so far`
+                            : `${run.passed} of ${run.checks} checks passed`
+                        }
                       >
                         <span
                           class="rounded-full bg-emerald-500"
@@ -148,7 +179,9 @@ const { runs, checksByRun, passRate } = Astro.props as Props;
                         />
                       </div>
                       <span class="text-right text-[0.7rem] text-muted-foreground">
-                        {runPassRate}% passed
+                        {runIsRunning
+                          ? `${run.passed}/${run.checks} completed`
+                          : `${runPassRate}% passed`}
                       </span>
                     </div>
 
@@ -157,12 +190,12 @@ const { runs, checksByRun, passRate } = Astro.props as Props;
                         {run.passed}/{run.checks}
                       </div>
                       <div class="text-[0.7rem] text-muted-foreground">
-                        checks
+                        {runIsRunning ? "checks so far" : "checks"}
                       </div>
                     </div>
                     <div class="hidden shrink-0 text-right md:block">
                       <div class="text-sm font-medium tabular-nums">
-                        {formatDuration(run.durationMs)}
+                        {formatDuration(runDurationMs)}
                       </div>
                       <div class="text-[0.7rem] text-muted-foreground">
                         duration
@@ -183,7 +216,9 @@ const { runs, checksByRun, passRate } = Astro.props as Props;
                     </span>
                     <span class="text-xs text-muted-foreground">
                       {run.passed} passed · {run.checks - run.passed} failed ·{" "}
-                      {formatDateTime(run.finishedAt)}
+                      {runIsRunning
+                        ? "Running now"
+                        : formatDateTime(run.finishedAt ?? run.startedAt)}
                     </span>
                   </div>
                   {orderedChecks.length > 0 ? (
@@ -232,7 +267,9 @@ const { runs, checksByRun, passRate } = Astro.props as Props;
                     </ul>
                   ) : (
                     <div class="mt-3 rounded-lg border border-dashed bg-card px-4 py-4 text-sm text-muted-foreground">
-                      No individual check details were saved for this run.
+                      {runIsRunning
+                        ? "Waiting for the first test result."
+                        : "No individual check details were saved for this run."}
                     </div>
                   )}
                 </div>

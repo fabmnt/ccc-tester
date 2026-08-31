@@ -6,11 +6,13 @@ import {
   type MutationCtx,
 } from "./_generated/server";
 import type { Doc, Id } from "./_generated/dataModel";
+import schema from "./schema";
 import {
   modeValidator,
   testResultValidator,
   type TestMode,
   type TestResult,
+  type RunStatus,
 } from "./validators";
 
 const WRITE_SECRET_ENV_VAR = "CONVEX_WRITE_SECRET";
@@ -55,6 +57,91 @@ export const getById = query({
   },
 });
 
+export const getActive = query({
+  args: {},
+  returns: v.union(v.null(), schema.doc("runs")),
+  handler: async (ctx) => {
+    return await ctx.db
+      .query("runs")
+      .withIndex("by_status", (query) => query.eq("status", "running"))
+      .order("desc")
+      .first();
+  },
+});
+
+export const start = mutation({
+  args: {
+    secret: v.string(),
+    runId: v.string(),
+    modes: v.array(modeValidator),
+    startedAt: v.number(),
+    clientId: v.string(),
+    clinicId: v.string(),
+    executionId: v.string(),
+    sheetName: v.string(),
+  },
+  returns: v.object({ created: v.boolean() }),
+  handler: async (ctx, args) => {
+    assertWriteSecret(args.secret);
+
+    const existingRun = await ctx.db
+      .query("runs")
+      .withIndex("by_run_id", (query) => query.eq("runId", args.runId))
+      .unique();
+    if (existingRun !== null) {
+      return { created: false };
+    }
+
+    const updatedAt = Date.now();
+    await ctx.db.insert("runs", {
+      runId: args.runId,
+      modes: args.modes,
+      status: "running",
+      startedAt: args.startedAt,
+      updatedAt,
+      checks: 0,
+      passed: 0,
+      durationMs: 0,
+      clientId: args.clientId,
+      clinicId: args.clinicId,
+      executionId: args.executionId,
+      sheetName: args.sheetName,
+    });
+
+    return { created: true };
+  },
+});
+
+export const finish = mutation({
+  args: {
+    secret: v.string(),
+    runId: v.string(),
+    status: v.union(v.literal("passed"), v.literal("failed")),
+  },
+  returns: v.object({ updated: v.boolean() }),
+  handler: async (ctx, args) => {
+    assertWriteSecret(args.secret);
+
+    const run = await ctx.db
+      .query("runs")
+      .withIndex("by_run_id", (query) => query.eq("runId", args.runId))
+      .unique();
+    if (run === null) {
+      return { updated: false };
+    }
+
+    const finishedAt = Date.now();
+    await ctx.db.patch("runs", run._id, {
+      status: args.status,
+      finishedAt,
+      updatedAt: finishedAt,
+      durationMs: finishedAt - run.startedAt,
+    });
+
+    return { updated: true };
+  },
+});
+
 export const save = mutation({
   args: {
     secret: v.string(),
@@ -63,11 +150,7 @@ export const save = mutation({
     results: v.array(testResultValidator),
   },
   handler: async (ctx, { secret, runId, mode, results }) => {
-    if (secret !== process.env[WRITE_SECRET_ENV_VAR]) {
-      throw new ConvexError(
-        `Invalid or missing write secret. Set ${WRITE_SECRET_ENV_VAR} in the deployment environment.`,
-      );
-    }
+    assertWriteSecret(secret);
 
     const existingRun = await ctx.db
       .query("runChecks")
@@ -112,8 +195,12 @@ async function upsertRunDoc(
     await ctx.db.insert("runs", {
       runId,
       modes: [mode],
+      status: results.some((result) => result.status === "failed")
+        ? "failed"
+        : "passed",
       startedAt: earliestStart,
       finishedAt: savedAt,
+      updatedAt: savedAt,
       checks: results.length,
       passed: passedCount,
       durationMs: savedAt - earliestStart,
@@ -130,16 +217,36 @@ async function upsertRunDoc(
     ? existingRun.modes
     : [...existingRun.modes, mode];
   const startedAt = Math.min(existingRun.startedAt, earliestStart);
-  const finishedAt = Math.max(existingRun.finishedAt, savedAt);
-  await ctx.db.patch("runs", existingRun._id, {
+  const finishedAt = Math.max(existingRun.finishedAt ?? savedAt, savedAt);
+  const status: RunStatus =
+    existingRun.status === "running"
+      ? "running"
+      : (existingRun.status ??
+        (results.some((result) => result.status === "failed")
+          ? "failed"
+          : "passed"));
+  const patch: Partial<Doc<"runs">> = {
     modes,
     checks: existingRun.checks + results.length,
     passed: existingRun.passed + passedCount,
     startedAt,
-    finishedAt,
-    durationMs: finishedAt - startedAt,
+    durationMs: savedAt - startedAt,
     commitHash: existingRun.commitHash ?? commitHash,
-  });
+    status,
+    updatedAt: savedAt,
+  };
+  if (status !== "running") {
+    patch.finishedAt = existingRun.finishedAt ?? finishedAt;
+  }
+  await ctx.db.patch("runs", existingRun._id, patch);
+}
+
+function assertWriteSecret(secret: string): void {
+  if (secret !== process.env[WRITE_SECRET_ENV_VAR]) {
+    throw new ConvexError(
+      `Invalid or missing write secret. Set ${WRITE_SECRET_ENV_VAR} in the deployment environment.`,
+    );
+  }
 }
 
 /**

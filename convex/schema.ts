@@ -1,6 +1,10 @@
 import { defineSchema, defineTable } from "convex/server";
 import { v } from "convex/values";
-import { modeValidator, testResultValidator } from "./validators";
+import {
+  modeValidator,
+  runStatusValidator,
+  testResultValidator,
+} from "./validators";
 
 export default defineSchema({
   runChecks: defineTable(testResultValidator.extend({ runId: v.string() }))
@@ -12,8 +16,10 @@ export default defineSchema({
   runs: defineTable({
     runId: v.string(),
     modes: v.array(modeValidator),
+    status: v.optional(runStatusValidator),
     startedAt: v.number(),
-    finishedAt: v.number(),
+    finishedAt: v.optional(v.number()),
+    updatedAt: v.optional(v.number()),
     checks: v.number(),
     passed: v.number(),
     /** Wall clock from first check start to save time; includes idle gaps. */
@@ -25,5 +31,6 @@ export default defineSchema({
     sheetName: v.string(),
   })
     .index("by_run_id", ["runId"])
-    .index("by_started_at", ["startedAt"]),
+    .index("by_started_at", ["startedAt"])
+    .index("by_status", ["status"]),
 });

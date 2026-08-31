@@ -92,8 +92,8 @@ missing, the CLI warns and keeps the local `test-results/<mode>.json` report.
 ## Running from the Astro endpoint
 
 `POST /api/run` starts a background test run and always enables result saving. The endpoint returns `202` with a `runId`;
-results become available on the `/tests` page after the run finishes. The `/run` page uses the equivalent `runTests`
-Astro action, while `/api/run` remains available for HTTP clients.
+a running row appears on the `/tests` page immediately, with more results added as each mode finishes. The `/run` page
+uses the equivalent `runTests` Astro action, while `/api/run` remains available for HTTP clients.
 
 Set `CONVEX_WRITE_SECRET` in the Astro server environment. The JSON payload uses the CLI options as structured fields:
 

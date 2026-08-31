@@ -45,20 +45,67 @@ export interface ConvexReportOptions {
   writeSecret?: string;
 }
 
+type FinishedRunStatus = "passed" | "failed";
+
+export async function startTestRunInConvex(
+  modes: ExecutableMode[],
+  cliArgs: CliArguments,
+  runId: string,
+  startedAt: number,
+  options: ConvexReportOptions = {},
+): Promise<void> {
+  const connection = getConvexConnection(options);
+  if (!connection) {
+    logMissingConvexConfiguration("Starting test run");
+    return;
+  }
+
+  const sheetName = cliArgs.executionSheet?.trim() ?? "";
+  const outcome = await connection.client.mutation(anyApi.runChecks.start, {
+    secret: connection.writeSecret,
+    runId,
+    modes,
+    startedAt,
+    clientId: TEST_CLIENT_NAME,
+    clinicId: TEST_CLINIC_NAME,
+    executionId: sheetName,
+    sheetName,
+  });
+  if (outcome.created) {
+    console.log(`Started tracking test run ${runId}.`);
+  }
+}
+
+export async function finishTestRunInConvex(
+  runId: string,
+  status: FinishedRunStatus,
+  options: ConvexReportOptions = {},
+): Promise<void> {
+  const connection = getConvexConnection(options);
+  if (!connection) {
+    logMissingConvexConfiguration("Finishing test run");
+    return;
+  }
+
+  const outcome = await connection.client.mutation(anyApi.runChecks.finish, {
+    secret: connection.writeSecret,
+    runId,
+    status,
+  });
+  if (outcome.updated) {
+    console.log(`Finished tracking test run ${runId} (${status}).`);
+  }
+}
+
 export async function saveTestResultsToConvex(
   mode: ExecutableMode,
   cliArgs: CliArguments,
   runId: string,
   options: ConvexReportOptions = {},
 ): Promise<void> {
-  const convexUrl =
-    options.convexUrl ?? process.env[CONVEX_URL_ENV_VAR]?.trim();
-  const writeSecret =
-    options.writeSecret ?? process.env[CONVEX_WRITE_SECRET_ENV_VAR]?.trim();
-  if (!convexUrl || !writeSecret) {
-    console.error(
-      `--save-results requires ${CONVEX_URL_ENV_VAR} and ${CONVEX_WRITE_SECRET_ENV_VAR} to be set in the environment. Skipping Convex save.`,
-    );
+  const connection = getConvexConnection(options);
+  if (!connection) {
+    logMissingConvexConfiguration("Saving test results");
     return;
   }
 
@@ -81,9 +128,8 @@ export async function saveTestResultsToConvex(
     return;
   }
 
-  const client = new ConvexHttpClient(convexUrl, { logger: false });
-  const outcome = await client.mutation(anyApi.runChecks.save, {
-    secret: writeSecret,
+  const outcome = await connection.client.mutation(anyApi.runChecks.save, {
+    secret: connection.writeSecret,
     runId,
     mode,
     results,
@@ -97,6 +143,34 @@ export async function saveTestResultsToConvex(
   } else {
     console.log(`Saved ${results.length} test result(s) to Convex (${mode}).`);
   }
+}
+
+interface ConvexConnection {
+  client: ConvexHttpClient;
+  writeSecret: string;
+}
+
+function getConvexConnection(
+  options: ConvexReportOptions,
+): ConvexConnection | null {
+  const convexUrl =
+    options.convexUrl ?? process.env[CONVEX_URL_ENV_VAR]?.trim();
+  const writeSecret =
+    options.writeSecret ?? process.env[CONVEX_WRITE_SECRET_ENV_VAR]?.trim();
+  if (!convexUrl || !writeSecret) {
+    return null;
+  }
+
+  return {
+    client: new ConvexHttpClient(convexUrl, { logger: false }),
+    writeSecret,
+  };
+}
+
+function logMissingConvexConfiguration(operation: string): void {
+  console.error(
+    `${operation} requires ${CONVEX_URL_ENV_VAR} and ${CONVEX_WRITE_SECRET_ENV_VAR} to be set in the environment.`,
+  );
 }
 
 function parseTestResults(

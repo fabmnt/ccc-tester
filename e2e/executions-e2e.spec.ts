@@ -9,6 +9,7 @@ import {
   getRowNumber,
   gridHeaders,
   gridRows,
+  openCellActionsPopover,
   openCellDropdown,
   openExecutionsClient,
   openExecutionsHome,
@@ -28,7 +29,10 @@ const mode = getTestMode();
 const settings = getTestSettings(mode);
 const REAL_API_MODES = new Set(["dev", "production"]);
 const GENERAL_FILTERS = [
-  { placeholder: "Verification Type", header: /verification type/i },
+  {
+    placeholder: "Verification Type",
+    header: /type of verification|verification type/i,
+  },
   {
     placeholder: "Carrier",
     header: /carrier name|insurance carrier|^carrier$/i,
@@ -302,20 +306,36 @@ test.describe("CCCdashboard executions", () => {
 
   test("updates DONE and NOT FOUND sticky column cells", async ({ page }) => {
     await openExecutionsClient(page, settings);
+    const statusTarget = await getCellByHeader(
+      page,
+      /^(final audit|update status|call center final confirmation)$/i,
+    );
+    expect(
+      statusTarget,
+      "No final audit status column is available",
+    ).not.toBeNull();
 
-    for (const columnClass of ["grid-sticky-done-col", "grid-sticky-nf-col"]) {
-      const row = await findRowWithCheckbox(page, columnClass);
-      expect(row, `No ${columnClass} checkbox is available`).not.toBeNull();
-      const checkbox = row!.locator(`.${columnClass} input[type="checkbox"]`);
-      const originalChecked = await checkbox.isChecked();
+    try {
+      await setDropdownValue(page, settings, statusTarget!, "EMPTY");
 
-      await toggleStickyCheckbox(page, settings, checkbox);
-      try {
-        await expect(checkbox).toBeChecked({ checked: !originalChecked });
-      } finally {
+      for (const columnClass of [
+        "grid-sticky-done-col",
+        "grid-sticky-nf-col",
+      ]) {
+        const row = await findRowWithCheckbox(page, columnClass);
+        expect(row, `No ${columnClass} checkbox is available`).not.toBeNull();
+        const checkbox = row!.locator(`.${columnClass} input[type="checkbox"]`);
+
         await toggleStickyCheckbox(page, settings, checkbox);
+        try {
+          await expect(checkbox).toBeChecked();
+        } finally {
+          await toggleStickyCheckbox(page, settings, checkbox);
+        }
+        await expect(checkbox).not.toBeChecked();
       }
-      await expect(checkbox).toBeChecked({ checked: originalChecked });
+    } finally {
+      await restoreDropdownValue(page, settings, statusTarget!);
     }
   });
 
@@ -329,15 +349,8 @@ test.describe("CCCdashboard executions", () => {
     await page.keyboard.press("Control+C");
     await expect.poll(() => readClipboard(page)).toBe(source.originalValue);
 
-    await source.cell.locator(".cell").hover();
-    await expect(
-      page.locator(".cell-actions-popover:visible").last(),
-    ).toBeVisible();
-    await page
-      .locator(".cell-actions-popover:visible")
-      .last()
-      .getByRole("button", { name: "Copy to clipboard" })
-      .click();
+    const actions = await openCellActionsPopover(page, source);
+    await actions.getByRole("button", { name: "Copy to clipboard" }).click();
     await expect.poll(() => readClipboard(page)).toBe(source.originalValue);
 
     try {
@@ -346,8 +359,13 @@ test.describe("CCCdashboard executions", () => {
         (value) => navigator.clipboard.writeText(value),
         pastedValue,
       );
+      await page.locator(".grid-scroll-container").focus();
       const writeResponsePromise = waitForCellWrite(page, settings);
       await page.keyboard.press("Control+V");
+      const pasteEditor = destination.cell.locator("input.cell-input");
+      await expect(pasteEditor).toBeVisible();
+      await expect(pasteEditor).toHaveValue(pastedValue);
+      await pasteEditor.press("Enter");
       const writeResponse = (await writeResponsePromise) as {
         ok: () => boolean;
       };
@@ -371,28 +389,44 @@ test.describe("CCCdashboard executions", () => {
     await assertLinkOpensInNewTab(page, docxLink);
     await assertLinkOpensInNewTab(page, pdfLink);
 
-    const createButton = page
-      .locator("button.grid-sticky-action-create-btn")
-      .first();
-    await expect(createButton).toHaveCount(1);
-    const createRow = createButton.locator(
-      "xpath=ancestor::div[contains(@class, 'grid-row')][1]",
+    const driveTarget = await getCellByHeader(
+      page,
+      /^(url drive|drive url|file url)$/i,
     );
-    const rowNumber = await getRowNumber(createRow);
-    const popupPromise = page.waitForEvent("popup");
-    await createButton.click();
-    const popup = await popupPromise;
-    await expect.poll(() => popup.url()).toMatch(/#\/edit\/form\//);
-    const createUrl = new URL(popup.url());
-    expect(createUrl.origin).toBe(new URL(settings.targetUrl).origin);
-    expect(createUrl.hash).toMatch(/^#\/edit\/form\/[^/]+\/[12]/);
-    const routeContext = getExecutionRouteContext(page);
-    expect(createUrl.searchParams.get("clientId")).toBe(routeContext.clientId);
-    expect(createUrl.searchParams.get("clinicId")).toBe(routeContext.clinicId);
-    expect(createUrl.searchParams.get("createMode")).toBe("true");
-    expect(createUrl.searchParams.get("date")).toBe(settings.sheetName);
-    expect(createUrl.searchParams.get("row")).toBe(String(rowNumber));
-    await popup.close();
+    expect(driveTarget, "No Drive URL column is available").not.toBeNull();
+
+    try {
+      await setTextWithEditor(page, settings, driveTarget!, "", "double-click");
+      const createButton = page
+        .locator("button.grid-sticky-action-create-btn")
+        .first();
+      await expect(createButton).toHaveCount(1);
+      const createRow = createButton.locator(
+        "xpath=ancestor::div[contains(@class, 'grid-row')][1]",
+      );
+      const rowNumber = await getRowNumber(createRow);
+      const popupPromise = page.waitForEvent("popup");
+      await createButton.click();
+      const popup = await popupPromise;
+      await expect.poll(() => popup.url()).toMatch(/#\/edit\/form\//);
+      const createUrl = new URL(popup.url());
+      expect(createUrl.origin).toBe(new URL(settings.targetUrl).origin);
+      expect(createUrl.hash).toMatch(/^#\/edit\/form\/[^/]+\/[12]/);
+      const createRouteUrl = new URL(createUrl.hash.slice(1), createUrl.origin);
+      const routeContext = getExecutionRouteContext(page);
+      expect(createRouteUrl.searchParams.get("clientId")).toBe(
+        routeContext.clientId,
+      );
+      expect(createRouteUrl.searchParams.get("clinicId")).toBe(
+        routeContext.clinicId,
+      );
+      expect(createRouteUrl.searchParams.get("createMode")).toBe("true");
+      expect(createRouteUrl.searchParams.get("date")).toBe(settings.sheetName);
+      expect(createRouteUrl.searchParams.get("row")).toBe(String(rowNumber));
+      await popup.close();
+    } finally {
+      await restoreCellValue(page, settings, driveTarget!);
+    }
   });
 
   test("applies specific column filters and general filters", async ({
@@ -546,7 +580,14 @@ async function assertLinkOpensInNewTab(
   const popupPromise = page.waitForEvent("popup");
   await link.click();
   const popup = await popupPromise;
-  await expect.poll(() => popup.url()).toBe(expectedUrl);
+  const absoluteExpectedUrl = new URL(expectedUrl!, page.url()).href;
+  await expect.poll(() => popup.url()).not.toBe("about:blank");
+  const popupUrl = new URL(popup.url());
+  const redirectDestination = popupUrl.searchParams.get("continue");
+  expect(
+    popupUrl.href === absoluteExpectedUrl ||
+      redirectDestination === absoluteExpectedUrl,
+  ).toBe(true);
   await popup.close();
 }
 
@@ -586,6 +627,28 @@ async function restoreDropdownValue(
     target.originalValue,
     "double-click",
   );
+}
+
+async function setDropdownValue(
+  page: Page,
+  settings: E2eSettings,
+  target: GridCellTarget,
+  value: string,
+): Promise<void> {
+  if ((await cellText(target.cell)).toUpperCase() === value) return;
+
+  const menu = await openCellDropdown(page, target);
+  const option = menu.getByText(value, { exact: true });
+  await expect(
+    option,
+    `${value} is not available in ${target.header}`,
+  ).toHaveCount(1);
+  const writeResponsePromise = waitForCellWrite(page, settings);
+  await option.click();
+  const response = (await writeResponsePromise) as { ok: () => boolean };
+  expect(response.ok()).toBe(true);
+  await waitForGridUpdates(page);
+  await expect(target.cell.locator(".cell")).toHaveText(value);
 }
 
 async function openRowsMenu(page: Page, row: Locator): Promise<Locator> {
