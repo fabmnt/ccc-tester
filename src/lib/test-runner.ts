@@ -32,17 +32,8 @@ export interface TestRunOptions {
 /** Structured equivalent of the ccc-tester CLI options; see bin/ccc-tester.ts --help. */
 export interface TestRunRequest {
   mode?: Mode;
-  accessToken?: string;
-  clientId?: string;
-  clinicId?: string;
-  executionId?: string;
   executionSheet?: string;
-  baseUrl?: string;
-  apiBaseUrl?: string;
-  devApiBaseUrl?: string;
-  productionApiBaseUrl?: string;
   scope?: TestScope;
-  route?: string;
   /** Extra arguments forwarded to the Playwright CLI (e.g. "--headed", "--grep=x"). Must not contain ccc-tester options. */
   playwrightArguments?: string[];
 }
@@ -79,17 +70,8 @@ export function buildCliArguments(request: TestRunRequest): string[] {
   };
 
   pushOption("--mode", request.mode);
-  pushOption("--access-token", request.accessToken);
-  pushOption("--client-id", request.clientId);
-  pushOption("--clinic-id", request.clinicId);
-  pushOption("--execution-id", request.executionId);
   pushOption("--execution-sheet", request.executionSheet);
-  pushOption("--base-url", request.baseUrl);
-  pushOption("--api-base-url", request.apiBaseUrl);
-  pushOption("--dev-api-base-url", request.devApiBaseUrl);
-  pushOption("--production-api-base-url", request.productionApiBaseUrl);
   pushOption("--scope", request.scope);
-  pushOption("--route", request.route);
   argv.push(...(request.playwrightArguments ?? []));
   argv.push("--save-results");
 
@@ -98,8 +80,8 @@ export function buildCliArguments(request: TestRunRequest): string[] {
 
 /**
  * Runs the ccc-tester suite and waits for it to finish. Spawns one Playwright
- * child process per mode, writes reports to `test-results/`, and saves results
- * to Convex. Requires the process to run with the project root as cwd
+ * child process per mode in parallel, writes reports to `test-results/`, and
+ * saves results to Convex. Requires the process to run with the project root as cwd
  * (Playwright config, e2e specs, and report paths are cwd-relative).
  * Throws InvalidArgumentsError or RunAlreadyActiveError before running.
  */
@@ -159,37 +141,47 @@ async function executeRun(
   options: TestRunOptions,
 ): Promise<number> {
   activeRunId = prepared.runId;
-  let exitCode = 0;
 
   try {
-    for (const mode of prepared.modes) {
-      const result = await runPlaywright(mode, prepared.argumentsValue);
-      if (result !== 0) {
-        exitCode = result;
-      }
+    const exitCodes = await Promise.all(
+      prepared.modes.map(async (mode) => {
+        let exitCode = 1;
 
-      if (prepared.argumentsValue.saveResults) {
         try {
-          await saveTestResultsToConvex(
-            mode,
-            prepared.argumentsValue,
-            prepared.runId,
-            options,
-          );
+          exitCode = await runPlaywright(mode, prepared.argumentsValue);
         } catch (error) {
           console.error(
-            `Failed to save results for ${mode} to Convex: ${
+            `Failed to run ${mode} tests: ${
               error instanceof Error ? error.message : error
             }`,
           );
         }
-      }
-    }
+
+        if (prepared.argumentsValue.saveResults) {
+          try {
+            await saveTestResultsToConvex(
+              mode,
+              prepared.argumentsValue,
+              prepared.runId,
+              options,
+            );
+          } catch (error) {
+            console.error(
+              `Failed to save results for ${mode} to Convex: ${
+                error instanceof Error ? error.message : error
+              }`,
+            );
+          }
+        }
+
+        return exitCode;
+      }),
+    );
+
+    return exitCodes.find((exitCode) => exitCode !== 0) ?? 0;
   } finally {
     activeRunId = undefined;
   }
-
-  return exitCode;
 }
 
 function parseAndValidateArguments(argv: string[]): CliArguments {
@@ -206,9 +198,6 @@ function parseAndValidateArguments(argv: string[]): CliArguments {
 
 function validateArguments(argumentsValue: CliArguments): void {
   const missingArguments = [
-    ["--client-id", argumentsValue.clientId],
-    ["--clinic-id", argumentsValue.clinicId],
-    ["--execution-id", argumentsValue.executionId],
     ["--execution-sheet", argumentsValue.executionSheet],
   ]
     .filter(([, value]) => !value?.trim())
@@ -235,7 +224,7 @@ function runPlaywright(
   ];
 
   console.log(
-    `\nRunning CCCdashboard ${mode} E2E against ${getTargetUrl(mode, argumentsValue.baseUrl)}`,
+    `\nRunning CCCdashboard ${mode} E2E against ${getTargetUrl(mode)}`,
   );
 
   return new Promise((resolvePromise, rejectPromise) => {

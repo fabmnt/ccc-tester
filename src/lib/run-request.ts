@@ -5,17 +5,8 @@ import { TEST_SCOPES } from "../../convex/validators.js";
 export const runRequestSchema = z
   .object({
     mode: z.enum(MODES).optional(),
-    accessToken: z.string().optional(),
-    clientId: z.string().optional(),
-    clinicId: z.string().optional(),
-    executionId: z.string().optional(),
     executionSheet: z.string().optional(),
-    baseUrl: z.string().optional(),
-    apiBaseUrl: z.string().optional(),
-    devApiBaseUrl: z.string().optional(),
-    productionApiBaseUrl: z.string().optional(),
     scope: z.enum(TEST_SCOPES).optional(),
-    route: z.string().optional(),
     playwrightArguments: z.array(z.string()).optional(),
   })
   .strict()

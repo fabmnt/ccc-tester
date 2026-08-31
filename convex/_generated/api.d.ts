@@ -8,7 +8,7 @@
  * @module
  */
 
-import type * as testResults from "../testResults.js";
+import type * as runChecks from "../runChecks.js";
 import type * as validators from "../validators.js";
 
 import type {
@@ -18,7 +18,7 @@ import type {
 } from "convex/server";
 
 declare const fullApi: ApiFromModules<{
-  testResults: typeof testResults;
+  runChecks: typeof runChecks;
   validators: typeof validators;
 }>;
 

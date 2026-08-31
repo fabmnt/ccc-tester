@@ -23,7 +23,6 @@ export const testResultStatusValidator = v.union(
 
 export const testResultValidator = v.object({
   scope: testScopeValidator,
-  route: v.optional(v.string()),
   mode: modeValidator,
   status: testResultStatusValidator,
   startedAt: v.number(),

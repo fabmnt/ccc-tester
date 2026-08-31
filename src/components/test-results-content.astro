@@ -7,12 +7,12 @@ import CardContent from "@/components/ui/card/CardContent.astro";
 import CardDescription from "@/components/ui/card/CardDescription.astro";
 import CardHeader from "@/components/ui/card/CardHeader.astro";
 import CardTitle from "@/components/ui/card/CardTitle.astro";
-import { listRuns, listTestResults } from "@/lib/convex";
+import { listRunChecks, listRuns } from "@/lib/convex";
 import { formatDateTime, formatDuration, timeAgo } from "@/lib/format";
 import { groupChecksByRun } from "@/lib/test-runs";
 import RunHistory from "@/components/run-history.astro";
 
-const results = await listTestResults();
+const results = await listRunChecks();
 const runs = await listRuns();
 const checksByRun = groupChecksByRun(results);
 

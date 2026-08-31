@@ -6,18 +6,13 @@ import {
   type CliArguments,
   type Mode,
 } from "./cli-arguments.js";
-import type { TestScope } from "../convex/validators.js";
 
 export type TestMode = Exclude<Mode, "all">;
 
 export interface E2eSettings {
-  accessToken: string;
   apiBaseUrl: string;
   password: string;
   username: string;
-  clientId: string;
-  clinicId: string;
-  executionId: string;
   mode: TestMode;
   sheetName: string;
   targetUrl: string;
@@ -29,7 +24,10 @@ const DEFAULT_DEV_URL = "http://127.0.0.1:4200";
 const DEFAULT_PRODUCTION_URL = "https://controlcentralcarrier.com";
 const DEFAULT_DEV_API_URL = "https://dev-carrier.dentalautomation.ai/";
 const DEFAULT_PRODUCTION_API_URL = "https://carriers.dentalautomation.ai/";
+const TEST_CREDENTIAL_ENV_NAMES = ["USERNAME", "PASSWORD"] as const;
 export const TEST_RUN_ARGUMENTS_ENV = "CCC_TEST_RUN_ARGUMENTS";
+export const TEST_CLIENT_NAME = "Carriers Testing";
+export const TEST_CLINIC_NAME = "Carrier testing clinic";
 
 let environmentLoaded = false;
 
@@ -38,12 +36,20 @@ export function loadE2eEnvironment(): void {
     return;
   }
 
-  for (const fileName of [ENV_FILE_NAME, CONVEX_ENV_FILE_NAME]) {
-    const envFilePath = resolve(process.cwd(), fileName);
-    if (existsSync(envFilePath)) {
-      loadEnvFile(envFilePath);
-    }
+  clearTestCredentials();
+
+  const e2eEnvFilePath = resolve(process.cwd(), ENV_FILE_NAME);
+  if (existsSync(e2eEnvFilePath)) {
+    loadEnvFile(e2eEnvFilePath);
   }
+
+  const e2eCredentials = readTestCredentials();
+  const convexEnvFilePath = resolve(process.cwd(), CONVEX_ENV_FILE_NAME);
+  if (existsSync(convexEnvFilePath)) {
+    loadEnvFile(convexEnvFilePath);
+  }
+
+  restoreTestCredentials(e2eCredentials);
 
   environmentLoaded = true;
 }
@@ -87,22 +93,8 @@ export function getTestMode(): TestMode {
   throw new Error('The "all" mode is only supported by the ccc-tester CLI.');
 }
 
-export function getTargetUrl(
-  mode: TestMode,
-  baseUrl: string | undefined = getRuntimeCliArguments().baseUrl,
-): string {
-  if (baseUrl) {
-    return baseUrl;
-  }
-
-  const configuredUrl =
-    mode === "production"
-      ? process.env["CCC_PRODUCTION_URL"]
-      : process.env["CCC_DEV_URL"];
-  return (
-    configuredUrl ??
-    (mode === "production" ? DEFAULT_PRODUCTION_URL : DEFAULT_DEV_URL)
-  );
+export function getTargetUrl(mode: TestMode): string {
+  return mode === "production" ? DEFAULT_PRODUCTION_URL : DEFAULT_DEV_URL;
 }
 
 export function getTestSettings(mode: TestMode = getTestMode()): E2eSettings {
@@ -110,96 +102,78 @@ export function getTestSettings(mode: TestMode = getTestMode()): E2eSettings {
   const argumentsValue = getRuntimeCliArguments();
 
   const missingArguments = [
-    ["--client-id", argumentsValue.clientId],
-    ["--clinic-id", argumentsValue.clinicId],
-    ["--execution-id", argumentsValue.executionId],
     ["--execution-sheet", argumentsValue.executionSheet],
   ]
     .filter(([, value]) => !value?.trim())
     .map(([name]) => name);
-  const accessToken =
-    argumentsValue.accessToken?.trim() ||
-    process.env["TEST_ACCESS_TOKEN"]?.trim() ||
-    "";
   const username = process.env["USERNAME"]?.trim() ?? "";
   const password = process.env["PASSWORD"]?.trim() ?? "";
-  const missingEnvironmentVariables =
-    accessToken || (username && password)
-      ? []
-      : ["TEST_ACCESS_TOKEN or USERNAME/PASSWORD"];
+  const missingEnvironmentVariables = [
+    ["USERNAME", username],
+    ["PASSWORD", password],
+  ]
+    .filter(([, value]) => !value)
+    .map(([name]) => name);
 
   if (missingArguments.length > 0 || missingEnvironmentVariables.length > 0) {
     throw new Error(
       `Missing ${[...missingArguments, ...missingEnvironmentVariables].join(
         ", ",
-      )}. Pass test values as CLI arguments and set credentials in ${ENV_FILE_NAME} or the environment.`,
+      )}. Pass the execution sheet as a CLI argument and set USERNAME and PASSWORD in ${ENV_FILE_NAME}.`,
     );
   }
 
-  const clientId = argumentsValue.clientId?.trim() ?? "";
-  const clinicId = argumentsValue.clinicId?.trim() ?? "";
-  const executionId = argumentsValue.executionId?.trim() ?? "";
   const sheetName = argumentsValue.executionSheet?.trim() ?? "";
-  const apiBaseUrl = getApiBaseUrl(mode, argumentsValue);
+  const apiBaseUrl = getApiBaseUrl(mode);
 
   return {
-    accessToken,
     apiBaseUrl: ensureTrailingSlash(apiBaseUrl),
-    clientId,
     password,
     username,
-    clinicId,
-    executionId,
     mode,
     sheetName,
-    targetUrl: getTargetUrl(mode, argumentsValue.baseUrl),
+    targetUrl: getTargetUrl(mode),
   };
-}
-
-export function buildExecutionsPagePath(
-  settings: Pick<E2eSettings, "clientId" | "clinicId" | "sheetName">,
-): string {
-  const query = new URLSearchParams({
-    clinic: settings.clinicId,
-    sheet: settings.sheetName,
-  });
-
-  return `/#/executions/${encodeURIComponent(settings.clientId)}?${query.toString()}`;
-}
-
-export function getTestRoute(
-  scope: TestScope,
-  cliArgs: CliArguments,
-): string | undefined {
-  const explicitRoute = cliArgs.route?.trim();
-  if (explicitRoute) {
-    return explicitRoute;
-  }
-
-  if (scope === "execution") {
-    return buildExecutionsPagePath({
-      clientId: cliArgs.clientId ?? "",
-      clinicId: cliArgs.clinicId ?? "",
-      sheetName: cliArgs.executionSheet ?? "",
-    });
-  }
-
-  return undefined;
 }
 
 function ensureTrailingSlash(value: string): string {
   return value.endsWith("/") ? value : `${value}/`;
 }
 
-function getApiBaseUrl(mode: TestMode, argumentsValue: CliArguments): string {
-  const modeSpecificUrl =
-    mode === "production"
-      ? argumentsValue.productionApiBaseUrl
-      : argumentsValue.devApiBaseUrl;
+function clearTestCredentials(): void {
+  TEST_CREDENTIAL_ENV_NAMES.forEach((name) => {
+    delete process.env[name];
+  });
+}
 
-  return (
-    modeSpecificUrl ??
-    argumentsValue.apiBaseUrl ??
-    (mode === "production" ? DEFAULT_PRODUCTION_API_URL : DEFAULT_DEV_API_URL)
-  );
+function readTestCredentials(): Record<
+  (typeof TEST_CREDENTIAL_ENV_NAMES)[number],
+  string | undefined
+> {
+  return {
+    PASSWORD: process.env["PASSWORD"],
+    USERNAME: process.env["USERNAME"],
+  };
+}
+
+function restoreTestCredentials(
+  credentials: Record<
+    (typeof TEST_CREDENTIAL_ENV_NAMES)[number],
+    string | undefined
+  >,
+): void {
+  TEST_CREDENTIAL_ENV_NAMES.forEach((name) => {
+    const value = credentials[name];
+    if (value === undefined) {
+      delete process.env[name];
+      return;
+    }
+    process.env[name] = value;
+  });
+}
+
+function getApiBaseUrl(mode: TestMode): string {
+  return mode === "production"
+    ? DEFAULT_PRODUCTION_API_URL
+    : DEFAULT_DEV_API_URL;
 }

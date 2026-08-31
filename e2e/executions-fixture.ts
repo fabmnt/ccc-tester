@@ -1,4 +1,12 @@
-import type { E2eSettings } from "./test-config";
+import {
+  TEST_CLIENT_NAME,
+  TEST_CLINIC_NAME,
+  type E2eSettings,
+} from "./test-config";
+
+export const MOCK_CLIENT_ID = "ccc-tester-client";
+export const MOCK_CLINIC_ID = "ccc-tester-clinic";
+export const MOCK_EXECUTION_ID = "ccc-tester-execution";
 
 export interface MockDashboardData {
   client: {
@@ -24,12 +32,12 @@ export function createMockDashboardData(
 ): MockDashboardData {
   return {
     client: {
-      _id: settings.clientId,
-      clientName: "CCC Tester client",
+      _id: MOCK_CLIENT_ID,
+      clientName: TEST_CLIENT_NAME,
       clinic: [
         {
-          _id: settings.clinicId,
-          clinicName: "CCC Tester clinic",
+          _id: MOCK_CLINIC_ID,
+          clinicName: TEST_CLINIC_NAME,
           drive: { spreadsheet: "ccc-tester-spreadsheet" },
         },
       ],
@@ -40,7 +48,7 @@ export function createMockDashboardData(
     ],
     tabs: [
       {
-        _id: settings.executionId,
+        _id: MOCK_EXECUTION_ID,
         index: 0,
         sheetId: 0,
         title: settings.sheetName,

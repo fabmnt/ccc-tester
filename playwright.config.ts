@@ -1,6 +1,5 @@
 import { defineConfig, devices } from "@playwright/test";
 import {
-  getRuntimeCliArguments,
   getTargetUrl,
   getTestMode,
   loadE2eEnvironment,
@@ -8,7 +7,6 @@ import {
 
 loadE2eEnvironment();
 const mode = getTestMode();
-const argumentsValue = getRuntimeCliArguments();
 const reportFile = `test-results/${mode}.json`;
 
 export default defineConfig({
@@ -21,7 +19,7 @@ export default defineConfig({
   },
   use: {
     ...devices["Desktop Chrome"],
-    baseURL: getTargetUrl(mode, argumentsValue.baseUrl),
+    baseURL: getTargetUrl(mode),
     screenshot: "only-on-failure",
     trace: "retain-on-failure",
     video: "retain-on-failure",

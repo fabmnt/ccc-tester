@@ -1,5 +1,7 @@
 # CCC Tester
+
 This project is a e2e tester and reporter of CCC dashboard. It consists of:
+
 - cli: runs end-to-end tests against dev server and production server of CCC dashboard.
 - Dashboard: shows information about the latest test results and historical test results.
 - backend: handles the storage and retrieval of test results and runs.
@@ -8,6 +10,7 @@ You should be able to find the CCCdashboard source code in `~/dev/dr/CCCdashboar
 No behavior modifications must be done to the CCCdashboard source code, only data-test attributes can be added to elements to cover a specific test case. This works only for dev server testing until the user manually desploys the change to production.
 
 ## Project checks
+
 - `pnpm lint`
 - `pnpm format`
 - `pnpm typecheck`

@@ -140,7 +140,7 @@ function getDashboardResponse(
     return {
       _id: "ccc-tester-user",
       fullName: "CCC Tester user",
-      roles: [{ name: "user", permission: [] }],
+      roles: [{ name: "QA", permission: [] }],
       twoFactor: { isEnabled: false },
       urlImage: "",
       username: "ccc-tester",
@@ -149,6 +149,15 @@ function getDashboardResponse(
 
   if (requestUrl.pathname === "/api/notifications/my/false") {
     return [];
+  }
+
+  if (requestUrl.pathname === "/api/v2/customers") {
+    return {
+      customers: [fixture.client],
+      query: {},
+      totalDocs: 1,
+      totalPages: 1,
+    };
   }
 
   if (requestUrl.pathname === `/api/clients/all/${fixture.client._id}`) {

@@ -5,19 +5,10 @@ export type Mode = (typeof MODES)[number];
 export type ExecutableMode = Exclude<Mode, "all">;
 
 export interface CliArguments {
-  accessToken: string | undefined;
-  apiBaseUrl: string | undefined;
-  baseUrl: string | undefined;
-  clientId: string | undefined;
-  clinicId: string | undefined;
-  devApiBaseUrl: string | undefined;
-  executionId: string | undefined;
   executionSheet: string | undefined;
   help: boolean;
   mode: Mode;
   playwrightArguments: string[];
-  productionApiBaseUrl: string | undefined;
-  route: string | undefined;
   saveResults: boolean;
   scope: TestScope;
 }
@@ -26,16 +17,7 @@ const BOOLEAN_OPTIONS = new Set(["save-results"]);
 
 export function parseCliArguments(argumentsList: string[]): CliArguments {
   let mode: string = "dev";
-  let accessToken: string | undefined;
-  let apiBaseUrl: string | undefined;
-  let baseUrl: string | undefined;
-  let clientId: string | undefined;
-  let clinicId: string | undefined;
-  let devApiBaseUrl: string | undefined;
-  let executionId: string | undefined;
   let executionSheet: string | undefined;
-  let productionApiBaseUrl: string | undefined;
-  let route: string | undefined;
   let scope: string = TEST_SCOPES[0];
   let help = false;
   let saveResults = false;
@@ -65,38 +47,11 @@ export function parseCliArguments(argumentsList: string[]): CliArguments {
       }
 
       switch (option) {
-        case "access-token":
-          accessToken = value;
-          break;
-        case "api-base-url":
-          apiBaseUrl = value;
-          break;
-        case "base-url":
-          baseUrl = value;
-          break;
-        case "client-id":
-          clientId = value;
-          break;
-        case "clinic-id":
-          clinicId = value;
-          break;
-        case "dev-api-base-url":
-          devApiBaseUrl = value;
-          break;
-        case "execution-id":
-          executionId = value;
-          break;
         case "execution-sheet":
           executionSheet = value;
           break;
         case "mode":
           mode = value ?? "";
-          break;
-        case "production-api-base-url":
-          productionApiBaseUrl = value;
-          break;
-        case "route":
-          route = value;
           break;
         case "save-results":
           saveResults = true;
@@ -124,19 +79,10 @@ export function parseCliArguments(argumentsList: string[]): CliArguments {
   }
 
   return {
-    accessToken,
-    apiBaseUrl,
-    baseUrl,
-    clientId,
-    clinicId,
-    devApiBaseUrl,
-    executionId,
     executionSheet,
     help,
     mode,
     playwrightArguments,
-    productionApiBaseUrl,
-    route,
     saveResults,
     scope,
   };
@@ -148,16 +94,7 @@ export function getForwardedArguments(
 ): string[] {
   const forwardedArguments = ["--mode", mode, "--scope", argumentsValue.scope];
   const options: Array<[string, string | undefined]> = [
-    ["--access-token", argumentsValue.accessToken],
-    ["--api-base-url", argumentsValue.apiBaseUrl],
-    ["--base-url", argumentsValue.baseUrl],
-    ["--client-id", argumentsValue.clientId],
-    ["--clinic-id", argumentsValue.clinicId],
-    ["--dev-api-base-url", argumentsValue.devApiBaseUrl],
-    ["--execution-id", argumentsValue.executionId],
     ["--execution-sheet", argumentsValue.executionSheet],
-    ["--production-api-base-url", argumentsValue.productionApiBaseUrl],
-    ["--route", argumentsValue.route],
   ];
 
   for (const [name, value] of options) {
@@ -179,21 +116,7 @@ function getOption(argument: string | undefined): string | undefined {
     return undefined;
   }
 
-  const optionNames = [
-    "access-token",
-    "api-base-url",
-    "base-url",
-    "client-id",
-    "clinic-id",
-    "dev-api-base-url",
-    "execution-id",
-    "execution-sheet",
-    "mode",
-    "production-api-base-url",
-    "route",
-    "save-results",
-    "scope",
-  ];
+  const optionNames = ["execution-sheet", "mode", "save-results", "scope"];
 
   return optionNames.find(
     (optionName) =>

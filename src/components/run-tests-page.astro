@@ -70,52 +70,20 @@ const RUN_MODES = ["all", "dev", "production", "frontend"];
           }
         </div>
         <span class="text-xs text-muted-foreground">
-          &ldquo;all&rdquo; runs dev, production and frontend one after another.
+          &ldquo;all&rdquo; runs dev, production and frontend in parallel.
         </span>
       </div>
 
-      <div class="grid gap-4 sm:grid-cols-2">
+      <div class="flex flex-col gap-1.5 sm:max-w-xl">
         <label class="flex flex-col gap-1.5">
           <span class="text-sm font-medium"
-            >Client ID<span class="text-destructive"> *</span></span
-          >
-          <Input name="clientId" placeholder="client" required />
-        </label>
-        <label class="flex flex-col gap-1.5">
-          <span class="text-sm font-medium"
-            >Clinic ID<span class="text-destructive"> *</span></span
-          >
-          <Input name="clinicId" placeholder="clinic" required />
-        </label>
-        <label class="flex flex-col gap-1.5">
-          <span class="text-sm font-medium"
-            >Execution ID<span class="text-destructive"> *</span></span
-          >
-          <Input name="executionId" placeholder="execution" required />
-        </label>
-        <label class="flex flex-col gap-1.5">
-          <span class="text-sm font-medium"
-            >Execution sheet<span class="text-destructive"> *</span></span
+            >Sheet Title<span class="text-destructive"> *</span></span
           >
           <Input name="executionSheet" placeholder="2026-08-28" required />
         </label>
-      </div>
-
-      <div class="flex flex-col gap-1.5 border-t pt-4">
-        <label class="flex flex-col gap-1.5 sm:max-w-xl">
-          <span class="text-sm font-medium">Access token</span>
-          <Input
-            name="accessToken"
-            type="password"
-            placeholder="Dashboard access token"
-            autocomplete="off"
-            aria-describedby="access-token-hint"
-          />
-          <span id="access-token-hint" class="text-xs text-muted-foreground">
-            Optional if the server has TEST_ACCESS_TOKEN or username/password
-            credentials configured.
-          </span>
-        </label>
+        <span class="text-xs text-muted-foreground">
+          Authentication uses USERNAME and PASSWORD from .env.e2e.
+        </span>
       </div>
 
       <div class="flex flex-col gap-4 border-t pt-4">
@@ -126,26 +94,6 @@ const RUN_MODES = ["all", "dev", "production", "frontend"];
           </p>
         </div>
         <div class="grid gap-4 sm:grid-cols-2">
-          <label class="flex flex-col gap-1.5">
-            <span class="text-sm font-medium">Base URL</span>
-            <Input name="baseUrl" placeholder="https://dashboard.example.com" />
-          </label>
-          <label class="flex flex-col gap-1.5">
-            <span class="text-sm font-medium">API base URL</span>
-            <Input name="apiBaseUrl" placeholder="https://api.example.com" />
-          </label>
-          <label class="flex flex-col gap-1.5">
-            <span class="text-sm font-medium">Dev API base URL</span>
-            <Input name="devApiBaseUrl" />
-          </label>
-          <label class="flex flex-col gap-1.5">
-            <span class="text-sm font-medium">Production API base URL</span>
-            <Input name="productionApiBaseUrl" />
-          </label>
-          <label class="flex flex-col gap-1.5">
-            <span class="text-sm font-medium">Route</span>
-            <Input name="route" placeholder="/dashboard" />
-          </label>
           <label class="flex flex-col gap-1.5">
             <span class="text-sm font-medium">Playwright arguments</span>
             <Input
@@ -208,16 +156,7 @@ const RUN_MODES = ["all", "dev", "production", "frontend"];
   >;
 
   const optionalFieldNames = [
-    "accessToken",
-    "clientId",
-    "clinicId",
-    "executionId",
     "executionSheet",
-    "baseUrl",
-    "apiBaseUrl",
-    "devApiBaseUrl",
-    "productionApiBaseUrl",
-    "route",
   ] as const satisfies readonly OptionalTextField[];
 
   type StatusKind = "started" | "error" | null;

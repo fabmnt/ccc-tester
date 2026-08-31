@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
 import type { CliArguments, ExecutableMode } from "../../e2e/cli-arguments.js";
-import { getTestRoute } from "../../e2e/test-config.js";
+import { TEST_CLIENT_NAME, TEST_CLINIC_NAME } from "../../e2e/test-config.js";
 import type { TestResult } from "../../convex/validators.js";
 
 const CONVEX_URL_ENV_VAR = "CONVEX_URL";
@@ -82,7 +82,7 @@ export async function saveTestResultsToConvex(
   }
 
   const client = new ConvexHttpClient(convexUrl, { logger: false });
-  const outcome = await client.mutation(anyApi.testResults.save, {
+  const outcome = await client.mutation(anyApi.runChecks.save, {
     secret: writeSecret,
     runId,
     mode,
@@ -106,7 +106,6 @@ function parseTestResults(
 ): TestResult[] {
   const runStartedAt = parseTimestamp(report.stats?.startTime);
   const commitHash = getCommitHash();
-  const route = getTestRoute(cliArgs.scope, cliArgs);
   const results: TestResult[] = [];
 
   for (const spec of flattenSpecs(report.suites ?? [])) {
@@ -122,16 +121,15 @@ function parseTestResults(
 
       results.push({
         scope: cliArgs.scope,
-        route,
         mode,
         status: finalResult.status === "passed" ? "passed" : "failed",
         startedAt:
           parseTimestamp(finalResult.startTime) ?? runStartedAt ?? Date.now(),
         durationMs: finalResult.duration ?? 0,
         testTitle: test.title ?? spec.title ?? "Unknown test",
-        clientId: cliArgs.clientId?.trim() ?? "",
-        clinicId: cliArgs.clinicId?.trim() ?? "",
-        executionId: cliArgs.executionId?.trim() ?? "",
+        clientId: TEST_CLIENT_NAME,
+        clinicId: TEST_CLINIC_NAME,
+        executionId: cliArgs.executionSheet?.trim() ?? "",
         sheetName: cliArgs.executionSheet?.trim() ?? "",
         commitHash,
         errorMessage: finalResult.error?.message,

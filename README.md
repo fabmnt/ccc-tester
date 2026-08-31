@@ -12,27 +12,17 @@ CCCdashboard must be running separately for local modes. The CLI does not start 
 Create `.env.e2e` in this project. It is ignored by Git:
 
 ```dotenv
-# Use either an access token or the username/password pair. An access token
-# can also be passed as --access-token to the CLI or as accessToken in the
-# Astro action/API payload.
-TEST_ACCESS_TOKEN=your-dashboard-access-token
+# The e2e suite logs in through the dashboard API with these credentials.
 USERNAME=your-dashboard-username
 PASSWORD=your-dashboard-password
 ```
 
-`TEST_ACCESS_TOKEN` is the value stored by CCCdashboard as `tokens` in browser local storage. You can also set
-`USERNAME` and `PASSWORD`; the e2e suite obtains a short-lived access token from the dashboard auth service when
-`TEST_ACCESS_TOKEN` is not set.
+The e2e suite obtains a short-lived access token from the dashboard's `/api/v2/auth/login` endpoint and stores it in
+the browser context as CCCdashboard expects. Tests do not open the dashboard login page or require a manually copied
+access token.
 
-Client, clinic, execution, and sheet values are provided as CLI arguments when running the checks. The only
-configuration values read from the environment are fallback credentials and the optional dev/production dashboard URLs.
-
-Optional values:
-
-```dotenv
-CCC_DEV_URL=http://127.0.0.1:4200
-CCC_PRODUCTION_URL=https://controlcentralcarrier.com
-```
+The tests always use the `Carriers Testing` client and `Carrier testing clinic` clinic. Only the execution sheet title
+is provided for each run. The dashboard and API URLs use the defaults in `e2e/test-config.ts`.
 
 The configured client must be `Carriers Testing`, and the configured clinic must be the Carrier testing clinic.
 The configured sheet and at least one other sheet should each contain a data row for the real dev and production
@@ -52,17 +42,10 @@ directory, then runs the generated JavaScript file with Node. To compile the CLI
 ## Run the checks
 
 ```sh
-pnpm test:e2e -- --mode=dev --client-id=dashboard-client-id --clinic-id=dashboard-clinic-id \
-  --execution-id=dashboard-execution-or-sheet-id --execution-sheet=2026-08-28
-pnpm test:e2e -- --mode=production --client-id=dashboard-client-id --clinic-id=dashboard-clinic-id \
-  --execution-id=dashboard-execution-or-sheet-id --execution-sheet=2026-08-28
-pnpm test:frontend:e2e -- --client-id=dashboard-client-id --clinic-id=dashboard-clinic-id \
-  --execution-id=dashboard-execution-or-sheet-id --execution-sheet=2026-08-28
-pnpm test:e2e -- --mode=all --client-id=dashboard-client-id --clinic-id=dashboard-clinic-id \
-  --execution-id=dashboard-execution-or-sheet-id --execution-sheet=2026-08-28
-pnpm test:e2e -- --access-token=your-dashboard-access-token --client-id=dashboard-client-id \
-  --clinic-id=dashboard-clinic-id --execution-id=dashboard-execution-or-sheet-id \
-  --execution-sheet=2026-08-28
+pnpm test:e2e -- --mode=dev --execution-sheet=2026-08-28
+pnpm test:e2e -- --mode=production --execution-sheet=2026-08-28
+pnpm test:frontend:e2e -- --execution-sheet=2026-08-28
+pnpm test:e2e -- --mode=all --execution-sheet=2026-08-28
 ```
 
 Modes use the following targets:
@@ -71,12 +54,12 @@ Modes use the following targets:
 - `production`: `https://controlcentralcarrier.com` and real API requests.
 - `frontend`: local CCCdashboard dev server with dashboard API and sync endpoints mocked. The real executions suite is
   skipped in this mode.
-- `all`: runs all three modes sequentially.
+- `all`: runs all three modes in parallel.
 
 Use Playwright options after the mode, for example `--headed`, `--debug`, or `--grep executions`.
 
-Reports are written to `test-results/<mode>.json`. Credentials are never printed by the CLI. API endpoints can be
-overridden with `--api-base-url`, `--dev-api-base-url`, or `--production-api-base-url`.
+Reports are written to `test-results/<mode>.json`. Credentials are never printed by the CLI. The CLI always uses the
+default dashboard and API URLs defined in `e2e/test-config.ts`.
 
 ## Saving results to Convex
 
@@ -84,13 +67,11 @@ Pass `--save-results` to submit the test results to the Convex database after ea
 future results dashboard.
 
 ```sh
-pnpm test:e2e -- --mode=frontend --client-id=... --clinic-id=... \
-  --execution-id=... --execution-sheet=... --save-results
+pnpm test:e2e -- --mode=frontend --execution-sheet=... --save-results
 ```
 
-Each saved result records the dashboard area under test (`--scope`, default `execution`) and the exact route that was
-tested (`--route`). The route is derived from the test arguments for the `execution` scope; pass `--route` explicitly to
-override it. More scopes (e.g. `form`) will be added as the corresponding tests are built.
+Each saved result records the dashboard area under test (`--scope`, default `execution`). More scopes (e.g. `form`) will
+be added as the corresponding tests are built.
 
 Setup, once:
 
@@ -119,14 +100,11 @@ Set `CONVEX_WRITE_SECRET` in the Astro server environment. The JSON payload uses
 ```json
 {
   "mode": "all",
-  "accessToken": "your-dashboard-access-token",
-  "clientId": "dashboard-client-id",
-  "clinicId": "dashboard-clinic-id",
-  "executionId": "dashboard-execution-or-sheet-id",
   "executionSheet": "2026-08-28",
   "playwrightArguments": ["--headed"]
 }
 ```
 
-The required `clientId`, `clinicId`, `executionId`, and `executionSheet` fields are validated by the endpoint. Optional
-fields include `baseUrl`, `apiBaseUrl`, `devApiBaseUrl`, `productionApiBaseUrl`, `scope`, and `route`.
+The `executionSheet` field is required by the endpoint. The server uses `USERNAME` and `PASSWORD` from `.env.e2e` to
+authenticate each test context. The dashboard handles the internal client, clinic, and execution IDs while opening the
+test context. The optional field is `scope`.

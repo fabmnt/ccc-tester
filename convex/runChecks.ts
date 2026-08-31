@@ -22,7 +22,7 @@ export const list = query({
   args: {},
   handler: async (ctx) => {
     return await ctx.db
-      .query("testResults")
+      .query("runChecks")
       .withIndex("by_started_at")
       .order("desc")
       .collect();
@@ -48,7 +48,7 @@ export const getById = query({
       return null;
     }
     try {
-      return await ctx.db.get("testResults", id as Id<"testResults">);
+      return await ctx.db.get("runChecks", id as Id<"runChecks">);
     } catch {
       return null;
     }
@@ -70,7 +70,7 @@ export const save = mutation({
     }
 
     const existingRun = await ctx.db
-      .query("testResults")
+      .query("runChecks")
       .withIndex("by_run_id_and_mode", (query) =>
         query.eq("runId", runId).eq("mode", mode),
       )
@@ -82,7 +82,7 @@ export const save = mutation({
     await upsertRunDoc(ctx, runId, mode, results);
 
     for (const result of results) {
-      await ctx.db.insert("testResults", { ...result, runId });
+      await ctx.db.insert("runChecks", { ...result, runId });
     }
 
     return { saved: results.length, skipped: false };
@@ -122,7 +122,6 @@ async function upsertRunDoc(
       clinicId: firstResult.clinicId,
       executionId: firstResult.executionId,
       sheetName: firstResult.sheetName,
-      route: firstResult.route,
     });
     return;
   }
@@ -159,10 +158,10 @@ export const backfillRuns = internalMutation({
         finishedAt: number;
         modes: TestMode[];
         commitHash?: string;
-        first: Doc<"testResults">;
+        first: Doc<"runChecks">;
       }
     >();
-    for await (const check of ctx.db.query("testResults")) {
+    for await (const check of ctx.db.query("runChecks")) {
       const stats = statsByRunId.get(check.runId);
       if (!stats) {
         statsByRunId.set(check.runId, {
@@ -213,7 +212,6 @@ export const backfillRuns = internalMutation({
         clinicId: stats.first.clinicId,
         executionId: stats.first.executionId,
         sheetName: stats.first.sheetName,
-        route: stats.first.route,
       });
       created += 1;
     }

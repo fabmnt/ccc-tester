@@ -2,8 +2,8 @@ import { expect, test, type Locator, type Page } from "@playwright/test";
 import {
   cellText,
   createMarker,
-  EXPECTED_CLIENT_NAME,
   getCellByHeader,
+  getExecutionRouteContext,
   getFirstTextCell,
   type GridCellTarget,
   getRowNumber,
@@ -16,6 +16,7 @@ import {
   restoreCellValue,
   rowCells,
   selectCell,
+  selectExecutionsClient,
   setTextWithEditor,
   waitForCellWrite,
   waitForGrid,
@@ -53,17 +54,8 @@ test.describe("CCCdashboard executions", () => {
     page,
   }) => {
     await openExecutionsHome(page, settings);
-
-    const clientShortcut = page
-      .locator(".executions-clinic-shortcut")
-      .filter({ hasText: EXPECTED_CLIENT_NAME });
-    expect(await clientShortcut.count()).toBeGreaterThan(0);
-    await expect(clientShortcut.first()).toContainText(/carrier testing/i);
-
-    await clientShortcut.first().click();
-    await expect(page).toHaveURL(
-      new RegExp(`/#/executions/${escapeRegExp(settings.clientId)}`),
-    );
+    await selectExecutionsClient(page);
+    await expect(page).toHaveURL(/#\/executions\/[^?]+/);
     await waitForGrid(page);
   });
 
@@ -90,7 +82,14 @@ test.describe("CCCdashboard executions", () => {
       .locator("executions-rework-tabs .tab-active")
       .first();
     const selectedTitle = (await selectedTab.innerText()).trim();
-    const nextTabIndex = selectedTitle === settings.sheetName ? 1 : 0;
+    const selectedIndex = await tabs.evaluateAll(
+      (tabElements, expectedTitle) =>
+        tabElements.findIndex(
+          (tabElement) => tabElement.textContent?.trim() === expectedTitle,
+        ),
+      selectedTitle,
+    );
+    const nextTabIndex = selectedIndex === 0 ? 1 : 0;
     const nextTab = tabs.nth(nextTabIndex);
     const nextTitle = (await nextTab.innerText()).trim();
     expect(nextTitle).not.toBe(selectedTitle);
@@ -387,8 +386,9 @@ test.describe("CCCdashboard executions", () => {
     const createUrl = new URL(popup.url());
     expect(createUrl.origin).toBe(new URL(settings.targetUrl).origin);
     expect(createUrl.hash).toMatch(/^#\/edit\/form\/[^/]+\/[12]/);
-    expect(createUrl.searchParams.get("clientId")).toBe(settings.clientId);
-    expect(createUrl.searchParams.get("clinicId")).toBe(settings.clinicId);
+    const routeContext = getExecutionRouteContext(page);
+    expect(createUrl.searchParams.get("clientId")).toBe(routeContext.clientId);
+    expect(createUrl.searchParams.get("clinicId")).toBe(routeContext.clinicId);
     expect(createUrl.searchParams.get("createMode")).toBe("true");
     expect(createUrl.searchParams.get("date")).toBe(settings.sheetName);
     expect(createUrl.searchParams.get("row")).toBe(String(rowNumber));

@@ -3,7 +3,7 @@ import { v } from "convex/values";
 import { modeValidator, testResultValidator } from "./validators";
 
 export default defineSchema({
-  testResults: defineTable(testResultValidator.extend({ runId: v.string() }))
+  runChecks: defineTable(testResultValidator.extend({ runId: v.string() }))
     .index("by_run_id", ["runId"])
     .index("by_run_id_and_mode", ["runId", "mode"])
     .index("by_started_at", ["startedAt"])
@@ -23,7 +23,6 @@ export default defineSchema({
     clinicId: v.string(),
     executionId: v.string(),
     sheetName: v.string(),
-    route: v.optional(v.string()),
   })
     .index("by_run_id", ["runId"])
     .index("by_started_at", ["startedAt"]),

@@ -10,11 +10,11 @@ import CardContent from "@/components/ui/card/CardContent.astro";
 import CardHeader from "@/components/ui/card/CardHeader.astro";
 import CardTitle from "@/components/ui/card/CardTitle.astro";
 import Layout from "@/layouts/DashboardLayout.astro";
-import { getTestResult } from "@/lib/convex";
+import { getRunCheck } from "@/lib/convex";
 import { formatDateTime, formatDuration } from "@/lib/format";
 
 const id = Astro.params.id ?? "";
-const result = await getTestResult(id);
+const result = await getRunCheck(id);
 
 const facts = result
   ? [
@@ -27,7 +27,6 @@ const facts = result
       { label: "Run ID", value: result.runId },
       { label: "Sheet", value: result.sheetName },
       { label: "Commit", value: result.commitHash ?? "—" },
-      { label: "Route", value: result.route ?? "—" },
     ]
   : [];
 

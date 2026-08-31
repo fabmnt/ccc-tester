@@ -5,17 +5,17 @@ import type { Doc } from "../../convex/_generated/dataModel";
 
 const client = new ConvexHttpClient(CONVEX_URL);
 
-export type TestResultDoc = Doc<"testResults">;
+export type RunCheckDoc = Doc<"runChecks">;
 export type RunDoc = Doc<"runs">;
 
-export async function listTestResults(): Promise<TestResultDoc[]> {
-  return client.query(api.testResults.list);
+export async function listRunChecks(): Promise<RunCheckDoc[]> {
+  return client.query(api.runChecks.list);
 }
 
 export async function listRuns(): Promise<RunDoc[]> {
-  return client.query(api.testResults.listRuns);
+  return client.query(api.runChecks.listRuns);
 }
 
-export async function getTestResult(id: string): Promise<TestResultDoc | null> {
-  return client.query(api.testResults.getById, { id });
+export async function getRunCheck(id: string): Promise<RunCheckDoc | null> {
+  return client.query(api.runChecks.getById, { id });
 }

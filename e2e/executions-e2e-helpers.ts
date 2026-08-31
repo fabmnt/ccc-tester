@@ -1,11 +1,17 @@
 import { expect, type Locator, type Page } from "@playwright/test";
-import type { E2eSettings } from "./test-config";
+import {
+  TEST_CLIENT_NAME,
+  TEST_CLINIC_NAME,
+  type E2eSettings,
+} from "./test-config";
 
-export const EXPECTED_CLIENT_NAME = "Carriers Testing";
-export const EXPECTED_CLINIC_NAME_FRAGMENT = "carrier testing";
+export const EXPECTED_CLIENT_NAME = TEST_CLIENT_NAME;
+export const EXPECTED_CLINIC_NAME_FRAGMENT = TEST_CLINIC_NAME.toLowerCase();
 export const LOADED_CONTENT_SELECTOR =
   ".executions-rework-content-shell:not(.executions-rework-content-shell--loading)";
 
+// This mirrors CCCdashboard's UsersService.login() endpoint. Authentication
+// happens through the API; the tests never navigate to the dashboard login page.
 const AUTH_LOGIN_URL = "https://carriers.dentalautomation.ai/api/v2/auth/login";
 const API_WRITE_PATH = "/api/spreadsheets/insert";
 const SPECIAL_COLUMN_PATTERN =
@@ -30,25 +36,21 @@ export async function authenticate(
   page: Page,
   settings: E2eSettings,
 ): Promise<void> {
-  let accessToken = settings.accessToken;
+  const response = await page.request.post(AUTH_LOGIN_URL, {
+    data: {
+      username: settings.username,
+      password: settings.password,
+    },
+  });
+  if (!response.ok()) {
+    throw new Error(`Dashboard login failed with HTTP ${response.status()}.`);
+  }
 
+  const accessToken = extractAccessToken(await response.json());
   if (!accessToken) {
-    const response = await page.request.post(AUTH_LOGIN_URL, {
-      data: {
-        username: settings.username,
-        password: settings.password,
-      },
-    });
-    if (!response.ok()) {
-      throw new Error(`Dashboard login failed with HTTP ${response.status()}.`);
-    }
-
-    accessToken = extractAccessToken(await response.json());
-    if (!accessToken) {
-      throw new Error(
-        "Dashboard login response did not include an access token.",
-      );
-    }
+    throw new Error(
+      "Dashboard login response did not include an access token.",
+    );
   }
 
   await page.addInitScript(
@@ -74,6 +76,24 @@ export async function openExecutionsHome(
   ).toBeVisible();
 }
 
+export async function selectExecutionsClient(page: Page): Promise<void> {
+  const clientSearch = page.locator("#executions-shortcut-search");
+  await expect(clientSearch).toBeVisible();
+  await clientSearch.fill(TEST_CLIENT_NAME);
+
+  const clientShortcut = page
+    .locator(".executions-client-shortcut")
+    .filter({ hasText: TEST_CLIENT_NAME });
+  await expect(clientShortcut).toHaveCount(1);
+  await clientShortcut.click();
+
+  const clinicShortcut = page
+    .locator(".executions-client-folder .executions-clinic-shortcut")
+    .filter({ hasText: TEST_CLINIC_NAME });
+  await expect(clinicShortcut).toHaveCount(1);
+  await clinicShortcut.click();
+}
+
 export async function openExecutionsClient(
   page: Page,
   settings: E2eSettings,
@@ -85,7 +105,7 @@ export async function openExecutionsClient(
     return (
       response.request().method() === "GET" &&
       url.origin === new URL(settings.apiBaseUrl).origin &&
-      url.pathname === `/api/clients/all/${settings.clientId}`
+      url.pathname.startsWith("/api/clients/all/")
     );
   });
   const tabsResponsePromise = page
@@ -99,10 +119,15 @@ export async function openExecutionsClient(
     })
     .catch(() => null);
 
-  const response = await page.goto(buildClientPath(settings), {
+  const response = await page.goto("/#/executions", {
     waitUntil: "domcontentloaded",
   });
   expect(response?.ok()).toBe(true);
+
+  await expect(
+    page.getByRole("heading", { name: "Welcome to Executions", exact: true }),
+  ).toBeVisible();
+  await selectExecutionsClient(page);
 
   const clientResponse = await clientResponsePromise;
   await assertApiResponse(clientResponse, "client details");
@@ -113,7 +138,7 @@ export async function openExecutionsClient(
   expect(client.clientName).toBe(EXPECTED_CLIENT_NAME);
 
   const selectedClinic = client.clinic?.find(
-    (clinic) => clinic._id === settings.clinicId,
+    (clinic) => clinic.clinicName === TEST_CLINIC_NAME,
   );
   expect(selectedClinic).toBeDefined();
   expect(selectedClinic?.clinicName?.toLowerCase()).toContain(
@@ -129,11 +154,17 @@ export async function openExecutionsClient(
   expect(tabs).toEqual(
     expect.arrayContaining([
       expect.objectContaining({
-        _id: settings.executionId,
         title: settings.sheetName,
       }),
     ]),
   );
+
+  const configuredTab = page
+    .locator("executions-rework-tabs .tab")
+    .filter({ hasText: settings.sheetName });
+  await expect(configuredTab).toHaveCount(1);
+  await configuredTab.click();
+  await expect(configuredTab).toHaveClass(/tab-active/);
 
   await waitForGrid(page);
 }
@@ -158,12 +189,22 @@ async function assertApiResponse(
   );
 }
 
-export function buildClientPath(settings: E2eSettings): string {
-  const query = new URLSearchParams({
-    clinic: settings.clinicId,
-    sheet: settings.sheetName,
-  });
-  return `/#/executions/${encodeURIComponent(settings.clientId)}?${query.toString()}`;
+export function getExecutionRouteContext(page: Page): {
+  clientId: string;
+  clinicId: string;
+} {
+  const pageUrl = new URL(page.url());
+  const routeUrl = new URL(pageUrl.hash.slice(1), pageUrl.origin);
+  const clientId = routeUrl.pathname.split("/").filter(Boolean).at(-1);
+  const clinicId = routeUrl.searchParams.get("clinic");
+
+  if (!clientId || !clinicId) {
+    throw new Error(
+      `Execution route does not contain client and clinic IDs: ${page.url()}`,
+    );
+  }
+
+  return { clientId, clinicId };
 }
 
 export async function waitForGrid(page: Page): Promise<void> {
@@ -263,7 +304,9 @@ export async function setTextWithEditor(
 
   switch (editor) {
     case "double-click":
-      await target.cell.locator(".cell-container").dblclick();
+      await target.cell.locator(".cell-container").dblclick({
+        position: { x: 8, y: 8 },
+      });
       break;
     case "enter":
       await selectCell(target);
