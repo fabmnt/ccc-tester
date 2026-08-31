@@ -296,6 +296,7 @@ export async function selectCell(target: GridCellTarget): Promise<void> {
   // Grid updates can remount the selected cell beneath the pointer and reopen
   // its hover actions. Dismiss that overlay before clicking the cell again.
   await page.mouse.move(POINTER_RESET_POSITION.x, POINTER_RESET_POSITION.y);
+  await page.locator(".grid-scroll-container").dispatchEvent("scroll");
   await expect(page.locator(".cell-actions-popover:visible")).toHaveCount(0);
   if (
     await container.evaluate((element) =>
@@ -350,7 +351,7 @@ export async function setTextWithEditor(
   await expect(editorLocator).toBeVisible();
   await editorLocator.fill(value);
 
-  const writeResponsePromise = waitForCellWrite(page, settings);
+  const writeResponsePromise = waitForCellWrite(page, settings, value);
   await editorLocator.press("Enter");
   await assertCellWriteFinished(page, target.cell, value, writeResponsePromise);
 }
@@ -358,15 +359,22 @@ export async function setTextWithEditor(
 export function waitForCellWrite(
   page: Page,
   settings: E2eSettings,
+  expectedValue: string,
 ): Promise<unknown> {
-  return page.waitForResponse((response) => {
-    const url = new URL(response.url());
-    return (
-      response.request().method() === "POST" &&
-      url.origin === new URL(settings.apiBaseUrl).origin &&
-      url.pathname === API_WRITE_PATH
-    );
-  });
+  return page.waitForResponse(
+    (response) => {
+      const url = new URL(response.url());
+      if (
+        response.request().method() === "POST" &&
+        url.origin === new URL(settings.apiBaseUrl).origin &&
+        url.pathname === API_WRITE_PATH
+      ) {
+        return requestWritesValue(response.request(), expectedValue);
+      }
+      return false;
+    },
+    { timeout: 30_000 },
+  );
 }
 
 export async function assertCellWriteFinished(
@@ -389,9 +397,18 @@ export async function restoreCellValue(
   page: Page,
   settings: E2eSettings,
   target: GridCellTarget,
+  expectedCurrentValue?: string,
 ): Promise<void> {
   const currentValue = await cellText(target.cell);
   if (currentValue === target.originalValue) return;
+  if (
+    expectedCurrentValue !== undefined &&
+    currentValue !== expectedCurrentValue
+  ) {
+    throw new Error(
+      `Refusing to restore ${target.header}: expected the test value ${JSON.stringify(expectedCurrentValue)}, but found ${JSON.stringify(currentValue)}.`,
+    );
+  }
   await setTextWithEditor(
     page,
     settings,
@@ -399,6 +416,24 @@ export async function restoreCellValue(
     target.originalValue,
     "double-click",
   );
+}
+
+function requestWritesValue(
+  request: { postDataJSON(): unknown },
+  expectedValue: string,
+): boolean {
+  try {
+    const payload = request.postDataJSON();
+    if (payload === null || typeof payload !== "object") return false;
+    const values = Reflect.get(payload, "values");
+    return (
+      Array.isArray(values) &&
+      Array.isArray(values[0]) &&
+      values[0][0] === expectedValue
+    );
+  } catch {
+    return false;
+  }
 }
 
 export async function openCellActionsPopover(

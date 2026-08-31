@@ -7,52 +7,65 @@ import Badge from "@/components/ui/badge/Badge.astro";
 import Button from "@/components/ui/button/Button.astro";
 import Card from "@/components/ui/card/Card.astro";
 import CardContent from "@/components/ui/card/CardContent.astro";
+import CardDescription from "@/components/ui/card/CardDescription.astro";
 import CardHeader from "@/components/ui/card/CardHeader.astro";
 import CardTitle from "@/components/ui/card/CardTitle.astro";
 import Layout from "@/layouts/DashboardLayout.astro";
-import { getRunCheck } from "@/lib/convex";
+import { getRunDetails } from "@/lib/convex";
 import { formatDateTime, formatDuration } from "@/lib/format";
 
-const id = Astro.params.id ?? "";
-const result = await getRunCheck(id);
+const runId = Astro.params.id ?? "";
+const details = await getRunDetails(runId);
+const run = details?.run ?? null;
+const checks = details?.checks ?? [];
+const orderedChecks = [...checks].sort((a, b) => {
+  if (a.status === b.status) return 0;
+  return a.status === "failed" ? -1 : 1;
+});
+const failedChecks = checks.filter((check) => check.status === "failed");
+const runStatus = run
+  ? (run.status ?? (failedChecks.length > 0 ? "failed" : "passed"))
+  : null;
+const runStatusVariant =
+  runStatus === "passed"
+    ? "secondary"
+    : runStatus === "running"
+      ? "outline"
+      : "destructive";
+const runStatusClass =
+  runStatus === "passed"
+    ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
+    : runStatus === "running"
+      ? "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400"
+      : undefined;
 
-const facts = result
+const facts = run
   ? [
-      { label: "Mode", value: result.mode },
-      { label: "Client", value: result.clientId },
-      { label: "Clinic", value: result.clinicId },
-      { label: "Scope", value: result.scope },
-      { label: "Started", value: formatDateTime(result.startedAt) },
-      { label: "Duration", value: formatDuration(result.durationMs) },
-      { label: "Run ID", value: result.runId },
-      { label: "Sheet", value: result.sheetName },
-      { label: "Commit", value: result.commitHash ?? "—" },
+      { label: "Status", value: runStatus ?? "—" },
+      { label: "Modes", value: run.modes.join(" · ") },
+      { label: "Checks", value: `${run.passed}/${run.checks} passed` },
+      { label: "Client", value: run.clientId },
+      { label: "Clinic", value: run.clinicId },
+      { label: "Started", value: formatDateTime(run.startedAt) },
+      {
+        label: "Finished",
+        value: run.finishedAt ? formatDateTime(run.finishedAt) : "Running",
+      },
+      { label: "Duration", value: formatDuration(run.durationMs) },
+      { label: "Run ID", value: run.runId },
+      { label: "Execution", value: run.executionId },
+      { label: "Sheet", value: run.sheetName },
+      { label: "Commit", value: run.commitHash ?? "—" },
     ]
-  : [];
-
-const artifacts = result
-  ? [
-      {
-        label: "Trace",
-        path: result.tracePath,
-        icon: "file-archive" as const,
-      },
-      {
-        label: "Screenshot",
-        path: result.screenshotPath,
-        icon: "file-image" as const,
-      },
-      { label: "Video", path: result.videoPath, icon: "video" as const },
-    ].filter((artifact) => artifact.path !== undefined)
   : [];
 ---
 
-<Layout title={result ? result.testTitle : "Test result"}>
+<Layout title={run ? `Run ${run.runId.slice(0, 8)}` : "Test run"}>
   {
-    result === null ? (
+    run === null ? (
       <Card>
         <CardContent class="flex flex-col items-start gap-2">
-          <p class="text-sm text-muted-foreground">Test result not found.</p>
+          <p class="text-sm text-muted-foreground">Test run not found.</p>
           <Button as="a" href="/tests" variant="outline">
             Back to test results
           </Button>
@@ -71,31 +84,29 @@ const artifacts = result
         <div class="flex flex-col gap-2">
           <div class="flex flex-wrap items-center gap-2.5">
             <Badge
-              variant={result.status === "passed" ? "secondary" : "destructive"}
-              class={
-                result.status === "passed"
-                  ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                  : undefined
-              }
+              variant={runStatusVariant}
+              class={runStatusClass}
+              shape="pill"
             >
-              {result.status}
+              {runStatus}
             </Badge>
             <h1 class="text-xl font-semibold tracking-tight">
-              {result.testTitle}
+              Run {run.runId.slice(0, 8)}
             </h1>
           </div>
           <p class="text-sm text-muted-foreground">
-            {result.mode} · {result.clientId} · started{" "}
-            {formatDateTime(result.startedAt)} · took{" "}
-            {formatDuration(result.durationMs)}
+            {run.modes.join(" · ")} · started {formatDateTime(run.startedAt)} ·
+            took {formatDuration(run.durationMs)}
           </p>
         </div>
 
-        {result.errorMessage && (
+        {failedChecks.length > 0 && (
           <Alert variant="destructive">
             <Icon name="circle-alert" />
-            <AlertTitle>Test failed</AlertTitle>
-            <AlertDescription>{result.errorMessage}</AlertDescription>
+            <AlertTitle>Run failed</AlertTitle>
+            <AlertDescription>
+              {failedChecks.length} of {checks.length} checks failed.
+            </AlertDescription>
           </Alert>
         )}
 
@@ -115,31 +126,110 @@ const artifacts = result
           </CardContent>
         </Card>
 
-        {artifacts.length > 0 && (
-          <Card>
-            <CardHeader>
-              <CardTitle>Artifacts</CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ul class="flex flex-col gap-2">
-                {artifacts.map(({ label, path, icon }) => (
-                  <li class="flex items-center gap-2 rounded-lg border px-3 py-2">
-                    <Icon
-                      name={icon}
-                      class="size-4 shrink-0 text-muted-foreground"
-                    />
-                    <span class="w-22 shrink-0 text-sm text-muted-foreground">
-                      {label}
-                    </span>
-                    <code class="min-w-0 flex-1 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
-                      {path}
-                    </code>
-                  </li>
-                ))}
-              </ul>
-            </CardContent>
-          </Card>
-        )}
+        <Card>
+          <CardHeader>
+            <CardTitle>Checks</CardTitle>
+            <CardDescription>
+              {checks.length} checks recorded for this run, grouped by outcome.
+            </CardDescription>
+          </CardHeader>
+          <CardContent class="px-0 py-0">
+            {orderedChecks.length > 0 ? (
+              <div class="divide-y">
+                {orderedChecks.map((check) => {
+                  const artifacts = [
+                    { label: "Trace", path: check.tracePath },
+                    { label: "Screenshot", path: check.screenshotPath },
+                    { label: "Video", path: check.videoPath },
+                  ].filter((artifact) => artifact.path !== undefined);
+
+                  return (
+                    <article class="flex flex-col gap-3 px-5 py-5 md:px-6">
+                      <div class="flex min-w-0 flex-wrap items-center gap-2">
+                        {check.status === "passed" ? (
+                          <Icon
+                            name="check-circle"
+                            class="size-5 shrink-0 text-emerald-500"
+                            aria-hidden="true"
+                          />
+                        ) : (
+                          <Icon
+                            name="circle-x"
+                            class="size-5 shrink-0 text-destructive"
+                            aria-hidden="true"
+                          />
+                        )}
+                        <h3 class="min-w-0 flex-1 text-sm font-semibold">
+                          {check.testTitle}
+                        </h3>
+                        <Badge variant="outline" size="sm" shape="pill">
+                          {check.mode}
+                        </Badge>
+                        <span class="text-xs text-muted-foreground">
+                          {formatDuration(check.durationMs)}
+                        </span>
+                      </div>
+
+                      <dl class="grid grid-cols-1 gap-x-8 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
+                        <div>
+                          <dt class="text-xs text-muted-foreground">Scope</dt>
+                          <dd>{check.scope}</dd>
+                        </div>
+                        <div>
+                          <dt class="text-xs text-muted-foreground">Client</dt>
+                          <dd>{check.clientId}</dd>
+                        </div>
+                        <div>
+                          <dt class="text-xs text-muted-foreground">Clinic</dt>
+                          <dd>{check.clinicId}</dd>
+                        </div>
+                        <div>
+                          <dt class="text-xs text-muted-foreground">Started</dt>
+                          <dd>{formatDateTime(check.startedAt)}</dd>
+                        </div>
+                      </dl>
+
+                      {check.errorMessage && (
+                        <p class="rounded-lg bg-destructive/10 px-3 py-2 text-sm text-destructive">
+                          {check.errorMessage}
+                        </p>
+                      )}
+
+                      {artifacts.length > 0 && (
+                        <ul class="flex flex-col gap-2">
+                          {artifacts.map(({ label, path }) => (
+                            <li class="flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2">
+                              <Icon
+                                name={
+                                  label === "Trace"
+                                    ? "file-archive"
+                                    : label === "Screenshot"
+                                      ? "file-image"
+                                      : "video"
+                                }
+                                class="size-4 shrink-0 text-muted-foreground"
+                              />
+                              <span class="w-22 shrink-0 text-xs text-muted-foreground">
+                                {label}
+                              </span>
+                              <code class="min-w-0 flex-1 truncate rounded bg-muted px-1.5 py-0.5 font-mono text-xs">
+                                {path}
+                              </code>
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </article>
+                  );
+                })}
+              </div>
+            ) : (
+              <div class="px-5 py-6 text-sm text-muted-foreground md:px-6">
+                No individual check details were saved for this run.
+              </div>
+            )}
+          </CardContent>
+        </Card>
       </div>
     )
   }

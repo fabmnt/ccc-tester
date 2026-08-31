@@ -60,25 +60,6 @@ const { runs, checksByRun, passRate } = Astro.props as Props;
               if (a.status === b.status) return 0;
               return a.status === "failed" ? -1 : 1;
             });
-            const runBadgeVariant =
-              runIsRunning || run.checks === 0
-                ? "outline"
-                : runFailed
-                  ? "destructive"
-                  : "secondary";
-            const runBadgeClass = runIsRunning
-              ? "border-sky-500/30 bg-sky-500/10 text-sky-600 dark:text-sky-400"
-              : !runFailed && run.checks > 0
-                ? "border-emerald-500/30 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400"
-                : undefined;
-            const runStatusLabel = runIsRunning
-              ? "Running"
-              : runFailed
-                ? "Failed"
-                : run.checks === 0
-                  ? "No checks"
-                  : "Passed";
-
             return (
               <details
                 class="group border-b last:border-b-0"
@@ -129,17 +110,11 @@ const { runs, checksByRun, passRate } = Astro.props as Props;
                         <span class="truncate text-sm font-medium">
                           Run {run.runId.slice(0, 8)}
                         </span>
-                        {index === 0 && <Badge variant="outline">Latest</Badge>}
-                        <Badge variant={runBadgeVariant} class={runBadgeClass}>
-                          {runIsRunning && (
-                            <Icon
-                              name="loader-circle"
-                              class="animate-spin"
-                              aria-hidden="true"
-                            />
-                          )}
-                          {runStatusLabel}
-                        </Badge>
+                        {index === 0 && (
+                          <Badge variant="outline" shape="pill" size="sm">
+                            Latest
+                          </Badge>
+                        )}
                       </span>
                       <span class="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground">
                         <span title={formatDateTime(run.startedAt)}>
@@ -226,7 +201,7 @@ const { runs, checksByRun, passRate } = Astro.props as Props;
                       {orderedChecks.map((check) => (
                         <li>
                           <a
-                            href={`/tests/${check._id}`}
+                            href={`/tests/${run.runId}`}
                             class="group flex min-w-0 items-center gap-3 rounded-lg border bg-card px-3 py-2.5 transition-colors hover:bg-muted/60"
                           >
                             {check.status === "passed" ? (

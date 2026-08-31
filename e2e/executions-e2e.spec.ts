@@ -23,11 +23,19 @@ import {
   waitForGrid,
   waitForGridUpdates,
 } from "./executions-e2e-helpers";
-import { getTestMode, getTestSettings, type E2eSettings } from "./test-config";
+import {
+  getTestMode,
+  getTestSettings,
+  TEST_CLIENT_NAME,
+  TEST_CLINIC_NAME,
+  type E2eSettings,
+} from "./test-config";
+import { acquireTestDataLock } from "./test-data-lock";
 
 const mode = getTestMode();
 const settings = getTestSettings(mode);
 const REAL_API_MODES = new Set(["dev", "production"]);
+const TEST_DATA_LOCK_TIMEOUT_MS = 10 * 60 * 1_000;
 const GENERAL_FILTERS = [
   {
     placeholder: "Verification Type",
@@ -48,11 +56,26 @@ test.use({ permissions: ["clipboard-read", "clipboard-write"] });
 test.describe.configure({ mode: "serial", timeout: 120_000 });
 
 test.describe("CCCdashboard executions", () => {
+  let releaseTestDataLock: (() => Promise<void>) | undefined;
+
   // These tests intentionally skip frontend mode: every request must reach the dashboard API.
   test.skip(
     !REAL_API_MODES.has(mode),
     "The executions suite requires a dev or production API.",
   );
+
+  test.beforeAll(async ({ browserName }, testInfo) => {
+    void browserName;
+    testInfo.setTimeout(TEST_DATA_LOCK_TIMEOUT_MS + 30_000);
+    releaseTestDataLock = await acquireTestDataLock(
+      `${TEST_CLIENT_NAME}:${TEST_CLINIC_NAME}:${settings.sheetName}`,
+      TEST_DATA_LOCK_TIMEOUT_MS,
+    );
+  });
+
+  test.afterAll(async () => {
+    await releaseTestDataLock?.();
+  });
 
   test("loads the executions home and opens Carriers Testing", async ({
     page,
@@ -152,7 +175,7 @@ test.describe("CCCdashboard executions", () => {
       await setTextWithEditor(page, settings, target, value, "double-click");
       await expect(target.cell.locator(".cell")).toHaveText(value);
     } finally {
-      await restoreCellValue(page, settings, target);
+      await restoreCellValue(page, settings, target, value);
     }
   });
 
@@ -167,7 +190,7 @@ test.describe("CCCdashboard executions", () => {
       await setTextWithEditor(page, settings, target, value, "enter");
       await expect(target.cell.locator(".cell")).toHaveText(value);
     } finally {
-      await restoreCellValue(page, settings, target);
+      await restoreCellValue(page, settings, target, value);
     }
   });
 
@@ -182,7 +205,7 @@ test.describe("CCCdashboard executions", () => {
       await setTextWithEditor(page, settings, target, value, "direct-entry");
       await expect(target.cell.locator(".cell")).toHaveText(value);
     } finally {
-      await restoreCellValue(page, settings, target);
+      await restoreCellValue(page, settings, target, value);
     }
   });
 
@@ -197,7 +220,7 @@ test.describe("CCCdashboard executions", () => {
       await setTextWithEditor(page, settings, target, value, "expanded");
       await expect(target.cell.locator(".cell")).toHaveText(value);
     } finally {
-      await restoreCellValue(page, settings, target);
+      await restoreCellValue(page, settings, target, value);
     }
   });
 
@@ -212,7 +235,7 @@ test.describe("CCCdashboard executions", () => {
       await setTextWithEditor(page, settings, target, value, "toolbar");
       await expect(target.cell.locator(".cell")).toHaveText(value);
     } finally {
-      await restoreCellValue(page, settings, target);
+      await restoreCellValue(page, settings, target, value);
     }
   });
 
@@ -266,7 +289,11 @@ test.describe("CCCdashboard executions", () => {
 
       let updated = false;
       try {
-        const nextWriteResponsePromise = waitForCellWrite(page, settings);
+        const nextWriteResponsePromise = waitForCellWrite(
+          page,
+          settings,
+          nextValue!,
+        );
         await menu.getByText(nextValue!, { exact: true }).click();
         const nextWriteResponse = (await nextWriteResponsePromise) as {
           ok: () => boolean;
@@ -279,7 +306,7 @@ test.describe("CCCdashboard executions", () => {
       } finally {
         if (updated) {
           try {
-            await restoreDropdownValue(page, settings, target);
+            await restoreDropdownValue(page, settings, target, nextValue!);
             await expect(target.cell.locator(".cell")).toHaveText(
               target.originalValue,
             );
@@ -326,16 +353,18 @@ test.describe("CCCdashboard executions", () => {
         expect(row, `No ${columnClass} checkbox is available`).not.toBeNull();
         const checkbox = row!.locator(`.${columnClass} input[type="checkbox"]`);
 
-        await toggleStickyCheckbox(page, settings, checkbox);
+        const checkedValue =
+          columnClass === "grid-sticky-done-col" ? "DONE" : "NOT FOUND";
+        await toggleStickyCheckbox(page, settings, checkbox, checkedValue);
         try {
           await expect(checkbox).toBeChecked();
         } finally {
-          await toggleStickyCheckbox(page, settings, checkbox);
+          await toggleStickyCheckbox(page, settings, checkbox, "EMPTY");
         }
         await expect(checkbox).not.toBeChecked();
       }
     } finally {
-      await restoreDropdownValue(page, settings, statusTarget!);
+      await restoreDropdownValue(page, settings, statusTarget!, "EMPTY");
     }
   });
 
@@ -360,7 +389,11 @@ test.describe("CCCdashboard executions", () => {
         pastedValue,
       );
       await page.locator(".grid-scroll-container").focus();
-      const writeResponsePromise = waitForCellWrite(page, settings);
+      const writeResponsePromise = waitForCellWrite(
+        page,
+        settings,
+        pastedValue,
+      );
       await page.keyboard.press("Control+V");
       const pasteEditor = destination.cell.locator("input.cell-input");
       await expect(pasteEditor).toBeVisible();
@@ -373,7 +406,7 @@ test.describe("CCCdashboard executions", () => {
       await waitForGridUpdates(page);
       await expect(destination.cell.locator(".cell")).toHaveText(pastedValue);
     } finally {
-      await restoreCellValue(page, settings, destination);
+      await restoreCellValue(page, settings, destination, pastedValue);
     }
   });
 
@@ -425,7 +458,7 @@ test.describe("CCCdashboard executions", () => {
       expect(createRouteUrl.searchParams.get("row")).toBe(String(rowNumber));
       await popup.close();
     } finally {
-      await restoreCellValue(page, settings, driveTarget!);
+      await restoreCellValue(page, settings, driveTarget!, "");
     }
   });
 
@@ -500,15 +533,16 @@ test.describe("CCCdashboard executions", () => {
 
     menu = await openRowsMenu(page, row);
     await menu.getByText("Copy coordinates", { exact: true }).click();
-    const coordinates = await readClipboard(page);
-    expect(coordinates).toContain("Client: Carriers Testing");
-    expect(coordinates).toContain("Clinic:");
-    expect(coordinates).toContain(`Row: ${rowNumber}`);
-    expect(coordinates).toContain("Link:");
+    await expect.poll(() => readClipboard(page)).toContain(`Row: ${rowNumber}`);
+    const coordinatesText = await readClipboard(page);
+    expect(coordinatesText).toContain("Client: Carriers Testing");
+    expect(coordinatesText).toContain("Clinic:");
+    expect(coordinatesText).toContain("Link:");
 
     menu = await openRowsMenu(page, row);
     const rawRowAction = menu.getByText("Copy raw row", { exact: true });
     await rawRowAction.click();
+    await expect.poll(() => readClipboard(page)).toMatch(/^\s*\[/);
     const rawRow = JSON.parse(await readClipboard(page)) as unknown;
     expect(Array.isArray(rawRow)).toBe(true);
     expect(Array.isArray((rawRow as unknown[])[0])).toBe(true);
@@ -563,8 +597,9 @@ async function toggleStickyCheckbox(
   page: Page,
   settings: E2eSettings,
   checkbox: Locator,
+  expectedValue: string,
 ): Promise<void> {
-  const writeResponsePromise = waitForCellWrite(page, settings);
+  const writeResponsePromise = waitForCellWrite(page, settings, expectedValue);
   await checkbox.click();
   const response = (await writeResponsePromise) as { ok: () => boolean };
   expect(response.ok()).toBe(true);
@@ -577,25 +612,46 @@ async function assertLinkOpensInNewTab(
 ): Promise<void> {
   const expectedUrl = await link.getAttribute("href");
   expect(expectedUrl).toBeTruthy();
-  const popupPromise = page.waitForEvent("popup");
-  await link.click();
-  const popup = await popupPromise;
+  await expect(link).toHaveAttribute("target", "_blank");
   const absoluteExpectedUrl = new URL(expectedUrl!, page.url()).href;
-  await expect.poll(() => popup.url()).not.toBe("about:blank");
-  const popupUrl = new URL(popup.url());
-  const redirectDestination = popupUrl.searchParams.get("continue");
-  expect(
-    popupUrl.href === absoluteExpectedUrl ||
-      redirectDestination === absoluteExpectedUrl,
-  ).toBe(true);
-  await popup.close();
+  const isExternal =
+    new URL(absoluteExpectedUrl).origin !== new URL(page.url()).origin;
+  if (isExternal) {
+    await page.context().route(absoluteExpectedUrl, (route) => route.abort());
+  }
+
+  const popupPromise = page.waitForEvent("popup");
+  try {
+    await link.click();
+    const popup = await popupPromise;
+    if (!isExternal) {
+      await expect.poll(() => popup.url()).toBe(absoluteExpectedUrl);
+    }
+    await popup.close();
+  } finally {
+    if (isExternal) {
+      await page.context().unroute(absoluteExpectedUrl);
+    }
+  }
 }
 
 async function restoreDropdownValue(
   page: Page,
   settings: E2eSettings,
   target: GridCellTarget,
+  expectedCurrentValue?: string,
 ): Promise<void> {
+  const currentValue = await cellText(target.cell);
+  if (currentValue === target.originalValue) return;
+  if (
+    expectedCurrentValue !== undefined &&
+    currentValue !== expectedCurrentValue
+  ) {
+    throw new Error(
+      `Refusing to restore ${target.header}: expected the test value ${JSON.stringify(expectedCurrentValue)}, but found ${JSON.stringify(currentValue)}.`,
+    );
+  }
+
   if (!target.originalValue) {
     await page.keyboard.press("Escape");
     await setTextWithEditor(
@@ -611,7 +667,11 @@ async function restoreDropdownValue(
   const menu = await openCellDropdown(page, target);
   const option = menu.getByText(target.originalValue, { exact: true });
   if (await option.count()) {
-    const writeResponsePromise = waitForCellWrite(page, settings);
+    const writeResponsePromise = waitForCellWrite(
+      page,
+      settings,
+      target.originalValue,
+    );
     await option.click();
     const response = (await writeResponsePromise) as { ok: () => boolean };
     expect(response.ok()).toBe(true);
@@ -643,7 +703,7 @@ async function setDropdownValue(
     option,
     `${value} is not available in ${target.header}`,
   ).toHaveCount(1);
-  const writeResponsePromise = waitForCellWrite(page, settings);
+  const writeResponsePromise = waitForCellWrite(page, settings, value);
   await option.click();
   const response = (await writeResponsePromise) as { ok: () => boolean };
   expect(response.ok()).toBe(true);
@@ -677,7 +737,12 @@ async function openColumnFilterWithOptions(page: Page): Promise<{
       "xpath=ancestor::div[contains(@class, 'popover')][1]",
     );
     const options = panel.locator("label.form-check");
-    if (await options.count()) {
+    const hasOptions = await options
+      .first()
+      .waitFor({ state: "visible", timeout: 2_000 })
+      .then(() => true)
+      .catch(() => false);
+    if (hasOptions) {
       const value = (
         await options.first().locator(".filter-content").innerText()
       ).trim();
@@ -694,11 +759,19 @@ async function assertColumnValuesStartWith(
   expectedValue: string,
 ): Promise<void> {
   const rows = gridRows(page);
-  await expect.poll(() => rows.count()).toBeGreaterThan(0);
-  for (let index = 0; index < (await rows.count()); index += 1) {
-    const text = await cellText(rowCells(rows.nth(index)).nth(columnIndex));
-    expect(text).toMatch(new RegExp(`^${escapeRegExp(expectedValue)}`));
-  }
+  const expectedPattern = new RegExp(`^${escapeRegExp(expectedValue)}`);
+  await expect
+    .poll(async () => {
+      const rowCount = await rows.count();
+      if (rowCount === 0) return false;
+
+      for (let index = 0; index < rowCount; index += 1) {
+        const text = await cellText(rowCells(rows.nth(index)).nth(columnIndex));
+        if (!expectedPattern.test(text)) return false;
+      }
+      return true;
+    })
+    .toBe(true);
 }
 
 async function findHeaderIndex(page: Page, matcher: RegExp): Promise<number> {

@@ -8,6 +8,7 @@ import CardHeader from "@/components/ui/card/CardHeader.astro";
 import Skeleton from "@/components/ui/skeleton/Skeleton.astro";
 import TestResultsContent from "@/components/test-results-content.astro";
 import { getActiveRun } from "@/lib/convex";
+import { CONVEX_URL } from "astro:env/server";
 
 const initialActiveRun = await getActiveRun();
 const initialActiveRunIsRunning = initialActiveRun?.status === "running";
@@ -16,10 +17,20 @@ const initialActiveRunIsRunning = initialActiveRun?.status === "running";
 <Layout title="Test results">
   <div
     class="flex flex-col gap-8"
+    data-convex-url={CONVEX_URL}
     data-tests-live-state
     data-active-run-id={initialActiveRunIsRunning ? initialActiveRun.runId : ""}
     data-active-run-updated-at={initialActiveRunIsRunning
       ? (initialActiveRun.updatedAt ?? initialActiveRun.startedAt)
+      : ""}
+    data-active-run-checks={initialActiveRunIsRunning
+      ? initialActiveRun.checks
+      : ""}
+    data-active-run-passed={initialActiveRunIsRunning
+      ? initialActiveRun.passed
+      : ""}
+    data-active-run-duration={initialActiveRunIsRunning
+      ? initialActiveRun.durationMs
       : ""}
   >
     <div class="flex flex-wrap items-end justify-between gap-4">
@@ -133,22 +144,26 @@ const initialActiveRunIsRunning = initialActiveRun?.status === "running";
 </Layout>
 
 <script>
-  const LIVE_RUN_POLL_INTERVAL_MS = 4_000;
+  import { ConvexClient } from "convex/browser";
+  import { api } from "../../../convex/_generated/api.js";
+
   const liveState = document.querySelector<HTMLElement>(
     "[data-tests-live-state]",
   );
-  const initialSnapshot = [
-    liveState?.dataset.activeRunId ?? "",
-    liveState?.dataset.activeRunUpdatedAt ?? "",
-  ].join(":");
+  const convexUrl = liveState?.dataset.convexUrl;
+  const initialSnapshot = liveState?.dataset.activeRunId
+    ? [
+        liveState.dataset.activeRunId,
+        "running",
+        liveState.dataset.activeRunChecks ?? "",
+        liveState.dataset.activeRunPassed ?? "",
+        liveState.dataset.activeRunDuration ?? "",
+        liveState.dataset.activeRunUpdatedAt ?? "",
+      ].join(":")
+    : "";
   let lastSnapshot = initialSnapshot;
 
-  const getActiveRunSnapshot = (payload: unknown): string => {
-    if (typeof payload !== "object" || payload === null) {
-      return "";
-    }
-
-    const run = (payload as { run?: unknown }).run;
+  const getActiveRunSnapshot = (run: unknown): string => {
     if (typeof run !== "object" || run === null) {
       return "";
     }
@@ -158,6 +173,9 @@ const initialActiveRunIsRunning = initialActiveRun?.status === "running";
       status?: unknown;
       startedAt?: unknown;
       updatedAt?: unknown;
+      checks?: unknown;
+      passed?: unknown;
+      durationMs?: unknown;
     };
     if (activeRun.status !== "running" || typeof activeRun.runId !== "string") {
       return "";
@@ -167,36 +185,76 @@ const initialActiveRunIsRunning = initialActiveRun?.status === "running";
       typeof activeRun.updatedAt === "number"
         ? activeRun.updatedAt
         : activeRun.startedAt;
-    return `${activeRun.runId}:${typeof updatedAt === "number" ? updatedAt : ""}`;
+    return [
+      activeRun.runId,
+      activeRun.status,
+      activeRun.checks,
+      activeRun.passed,
+      activeRun.durationMs,
+      typeof updatedAt === "number" ? updatedAt : "",
+    ].join(":");
   };
 
-  const refreshWhenRunChanges = async (): Promise<void> => {
-    try {
-      const response = await fetch("/api/runs/active", {
-        cache: "no-store",
-      });
-      if (!response.ok) {
-        return;
-      }
-
-      const snapshot = getActiveRunSnapshot(await response.json());
-      if (snapshot === lastSnapshot) {
-        return;
-      }
-
-      lastSnapshot = snapshot;
-      window.location.reload();
-    } catch {
-      // The next poll retries while the dashboard is temporarily unavailable.
+  document.addEventListener("click", (event) => {
+    const target = event.target;
+    if (!(target instanceof HTMLElement)) {
+      return;
     }
-  };
 
-  void refreshWhenRunChanges();
-  const liveRunPoll = window.setInterval(
-    refreshWhenRunChanges,
-    LIVE_RUN_POLL_INTERVAL_MS,
-  );
-  window.addEventListener("pagehide", () => {
-    window.clearInterval(liveRunPoll);
+    const tab = target.closest<HTMLButtonElement>("[data-environment-tab]");
+    const tabGroup = tab?.closest<HTMLElement>("[data-environment-tabs]");
+    if (!tab || !tabGroup) {
+      return;
+    }
+
+    const selectedEnvironment = tab.dataset.environmentTab;
+    if (!selectedEnvironment) {
+      return;
+    }
+
+    tabGroup
+      .querySelectorAll<HTMLButtonElement>("[data-environment-tab]")
+      .forEach((environmentTab) => {
+        environmentTab.setAttribute(
+          "aria-selected",
+          String(environmentTab === tab),
+        );
+      });
+    tabGroup
+      .querySelectorAll<HTMLElement>("[data-environment-panel]")
+      .forEach((panel) => {
+        panel.hidden = panel.dataset.environmentPanel !== selectedEnvironment;
+      });
   });
+
+  if (convexUrl) {
+    const convex = new ConvexClient(convexUrl);
+    const activeRunSubscription = convex.onUpdate(
+      api.runChecks.getActive,
+      {},
+      (run) => {
+        const snapshot = getActiveRunSnapshot(run);
+        if (snapshot === lastSnapshot) {
+          return;
+        }
+
+        lastSnapshot = snapshot;
+        window.location.reload();
+      },
+      (error) => {
+        console.error("Live test run updates failed:", error);
+      },
+    );
+
+    window.addEventListener(
+      "pagehide",
+      () => {
+        activeRunSubscription.unsubscribe();
+        void convex.close();
+      },
+      { once: true },
+    );
+  } else {
+    console.error("Live test run updates are unavailable: missing Convex URL.");
+  }
 </script>

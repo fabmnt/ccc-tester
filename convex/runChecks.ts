@@ -5,7 +5,7 @@ import {
   internalMutation,
   type MutationCtx,
 } from "./_generated/server";
-import type { Doc, Id } from "./_generated/dataModel";
+import type { Doc } from "./_generated/dataModel";
 import schema from "./schema";
 import {
   modeValidator,
@@ -16,9 +16,6 @@ import {
 } from "./validators";
 
 const WRITE_SECRET_ENV_VAR = "CONVEX_WRITE_SECRET";
-
-// Convex document IDs are lowercase alphanumeric strings.
-const CONVEX_ID_PATTERN = /^[a-z0-9]{16,}$/;
 
 export const list = query({
   args: {},
@@ -43,17 +40,31 @@ export const listRuns = query({
   },
 });
 
-export const getById = query({
-  args: { id: v.string() },
-  handler: async (ctx, { id }) => {
-    if (!CONVEX_ID_PATTERN.test(id)) {
+export const getRunDetails = query({
+  args: { runId: v.string() },
+  returns: v.union(
+    v.null(),
+    v.object({
+      run: schema.doc("runs"),
+      checks: v.array(schema.doc("runChecks")),
+    }),
+  ),
+  handler: async (ctx, { runId }) => {
+    const run = await ctx.db
+      .query("runs")
+      .withIndex("by_run_id", (query) => query.eq("runId", runId))
+      .unique();
+    if (run === null) {
       return null;
     }
-    try {
-      return await ctx.db.get("runChecks", id as Id<"runChecks">);
-    } catch {
-      return null;
-    }
+
+    const checks = await ctx.db
+      .query("runChecks")
+      .withIndex("by_run_id", (query) => query.eq("runId", runId))
+      .order("desc")
+      .collect();
+
+    return { run, checks };
   },
 });
 
