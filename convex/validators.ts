@@ -17,7 +17,7 @@ export const runStatusValidator = v.union(
 
 export type RunStatus = Infer<typeof runStatusValidator>;
 
-export const TEST_SCOPES = ["execution", "Edit form"] as const;
+export const TEST_SCOPES = ["execution", "Executions", "Edit form"] as const;
 export type TestScope = (typeof TEST_SCOPES)[number];
 
 export const testScopeValidator = v.union(

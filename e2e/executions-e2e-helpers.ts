@@ -1,4 +1,5 @@
 import { expect, type Locator, type Page } from "@playwright/test";
+import { MOCK_ACCESS_TOKEN } from "./mock-dashboard-api";
 import {
   TEST_CLIENT_NAME,
   TEST_CLINIC_NAME,
@@ -37,6 +38,11 @@ export async function authenticate(
   page: Page,
   settings: E2eSettings,
 ): Promise<void> {
+  if (settings.mode === "frontend") {
+    await setAuthenticationState(page, MOCK_ACCESS_TOKEN, settings.apiBaseUrl);
+    return;
+  }
+
   const response = await page.request.post(AUTH_LOGIN_URL, {
     data: {
       username: settings.username,
@@ -54,12 +60,20 @@ export async function authenticate(
     );
   }
 
+  await setAuthenticationState(page, accessToken, settings.apiBaseUrl);
+}
+
+async function setAuthenticationState(
+  page: Page,
+  accessToken: string,
+  apiBaseUrl: string,
+): Promise<void> {
   await page.addInitScript(
     ({ token, apiBaseUrl }) => {
       window.localStorage.setItem("tokens", token);
       window.sessionStorage.setItem("BASE_API", apiBaseUrl);
     },
-    { token: accessToken, apiBaseUrl: settings.apiBaseUrl },
+    { token: accessToken, apiBaseUrl },
   );
 }
 

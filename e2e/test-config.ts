@@ -108,12 +108,15 @@ export function getTestSettings(mode: TestMode = getTestMode()): E2eSettings {
     .map(([name]) => name);
   const username = process.env["USERNAME"]?.trim() ?? "";
   const password = process.env["PASSWORD"]?.trim() ?? "";
-  const missingEnvironmentVariables = [
-    ["USERNAME", username],
-    ["PASSWORD", password],
-  ]
-    .filter(([, value]) => !value)
-    .map(([name]) => name);
+  const missingEnvironmentVariables =
+    mode === "frontend"
+      ? []
+      : [
+          ["USERNAME", username],
+          ["PASSWORD", password],
+        ]
+          .filter(([, value]) => !value)
+          .map(([name]) => name);
 
   if (missingArguments.length > 0 || missingEnvironmentVariables.length > 0) {
     throw new Error(

@@ -1,11 +1,5 @@
-import {
-  expect,
-  test,
-  type Download,
-  type Locator,
-  type Page,
-  type Request,
-} from "@playwright/test";
+import { expect, test } from "./test-fixtures";
+import type { Download, Locator, Page, Request } from "@playwright/test";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import {
@@ -13,6 +7,7 @@ import {
   selectExecutionsClient,
   waitForGrid,
 } from "./executions-e2e-helpers";
+import { SECONDARY_API_ORIGIN } from "./mock-dashboard-api";
 import {
   getTestMode,
   getTestSettings,
@@ -23,9 +18,7 @@ import { acquireTestDataLock } from "./test-data-lock";
 
 const mode = getTestMode();
 const settings = getTestSettings(mode);
-const REAL_API_MODES = new Set(["dev", "production"]);
 const TEST_DATA_LOCK_TIMEOUT_MS = 10 * 60 * 1_000;
-const SECONDARY_API_ORIGIN = "https://ccc-api.controlcentralcarrier.com";
 const FORM_LOCAL_STORAGE_KEY = "formless";
 const execFileAsync = promisify(execFile);
 
@@ -47,344 +40,349 @@ interface UploadPayload {
 
 test.describe.configure({ mode: "serial", timeout: 180_000 });
 
-test.describe("CCCdashboard editable form", () => {
-  let releaseTestDataLock: (() => Promise<void>) | undefined;
+test.describe(
+  "CCCdashboard editable form",
+  { annotation: { type: "scope", description: "Edit form" } },
+  () => {
+    let releaseTestDataLock: (() => Promise<void>) | undefined;
 
-  test.skip(
-    !REAL_API_MODES.has(mode),
-    "The editable form suite requires a dev or production API.",
-  );
+    test.beforeAll(async ({ browserName }, testInfo) => {
+      void browserName;
+      if (mode === "frontend") return;
 
-  test.beforeAll(async ({ browserName }, testInfo) => {
-    void browserName;
-    testInfo.setTimeout(TEST_DATA_LOCK_TIMEOUT_MS + 30_000);
-    releaseTestDataLock = await acquireTestDataLock(
-      `${TEST_CLIENT_NAME}:${TEST_CLINIC_NAME}:${settings.sheetName}`,
-      TEST_DATA_LOCK_TIMEOUT_MS,
-    );
-  });
+      testInfo.setTimeout(TEST_DATA_LOCK_TIMEOUT_MS + 30_000);
+      releaseTestDataLock = await acquireTestDataLock(
+        `${TEST_CLIENT_NAME}:${TEST_CLINIC_NAME}:${settings.sheetName}`,
+        TEST_DATA_LOCK_TIMEOUT_MS,
+      );
+    });
 
-  test.afterAll(async () => {
-    await releaseTestDataLock?.();
-  });
+    test.afterAll(async () => {
+      await releaseTestDataLock?.();
+    });
 
-  test("loads the row form with the backend bookmark values", async ({
-    page,
-  }) => {
-    const opened = await openExistingEditableForm(page);
-    const rendered = await readRenderedBookmarks(opened.page);
+    test("loads the row form with the backend bookmark values", async ({
+      page,
+    }) => {
+      const opened = await openExistingEditableForm(page);
+      const rendered = await readRenderedBookmarks(opened.page);
 
-    expect(Object.keys(rendered).length).toBeGreaterThan(0);
-    for (const [bookmark, value] of Object.entries(rendered)) {
-      expect(
-        normalizeBookmarkValue(value),
-        `Rendered value for ${bookmark}`,
-      ).toBe(normalizeBookmarkValue(opened.initialBookmarks[bookmark] ?? ""));
-    }
-  });
-
-  test("edits text, box, and toggle bookmarks and sends updated and untouched values", async ({
-    page,
-  }, testInfo) => {
-    const opened = await openExistingEditableForm(page);
-    const original = await readRenderedBookmarks(opened.page);
-    const changes = await editEveryBookmarkType(opened.page, testInfo.testId);
-    const expected = { ...original, ...changes };
-    await opened.page.route("**/api/drive/upload-formless/**", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: "{}",
-      }),
-    );
-    const upload = waitForUpload(opened.page, settings.apiBaseUrl);
-    await confirmSave(opened.page);
-    const payload = (await upload).postDataJSON() as UploadPayload;
-
-    expect(payload.fileId).toBe(opened.fileId);
-    expect(normalizeBookmarkValues(payload.bookmarks)).toMatchObject(
-      normalizeBookmarkValues(expected),
-    );
-    expect(payload.bookmarks["__NoMissings"]).toBe("true");
-  });
-
-  test("refreshes bookmark data and persists a successful backend update", async ({
-    page,
-  }, testInfo) => {
-    const opened = await openExistingEditableForm(page);
-    const original = await readRenderedBookmarks(opened.page);
-    const text = opened.page
-      .locator('formless-text-input [contenteditable="true"]')
-      .first();
-    const bookmark = await requiredAttribute(text, "id");
-    const value = marker(testInfo.testId, "persisted");
-
-    try {
-      await text.fill(value);
-      await text.blur();
-      const upload = waitForUploadResponse(opened.page, settings.apiBaseUrl);
-      await confirmSave(opened.page);
-      const uploadResponse = await upload;
-      if (!uploadResponse.ok()) {
-        throw new Error(
-          `Form save failed with HTTP ${uploadResponse.status()}: ${(await uploadResponse.text()).slice(0, 500)}`,
-        );
+      expect(Object.keys(rendered).length).toBeGreaterThan(0);
+      for (const [bookmark, value] of Object.entries(rendered)) {
+        expect(
+          normalizeBookmarkValue(value),
+          `Rendered value for ${bookmark}`,
+        ).toBe(normalizeBookmarkValue(opened.initialBookmarks[bookmark] ?? ""));
       }
-      await expect(opened.page.locator(cssId(bookmark))).toHaveText(value);
-      await opened.page.reload({ waitUntil: "domcontentloaded" });
-      await discardRecoverableChanges(opened.page);
-      await waitForEditableForm(opened.page);
-      await expect(opened.page.locator(cssId(bookmark))).toHaveText(value);
-    } finally {
-      await restoreBookmarks(opened.page, original, [bookmark]);
-    }
-  });
-
-  test("recovers only unsaved local bookmark changes", async ({
-    page,
-  }, testInfo) => {
-    const opened = await openExistingEditableForm(page);
-    const text = opened.page
-      .locator('formless-text-input [contenteditable="true"]')
-      .first();
-    await expect(text).toBeVisible();
-    const bookmark = await requiredAttribute(text, "id");
-    const recoveredValue = marker(testInfo.testId, "recovered");
-
-    await opened.page.evaluate(
-      ({ fileId, bookmark, recoveredValue }) => {
-        localStorage.setItem(
-          "formless",
-          JSON.stringify([
-            { fileId, bookmarks: { [bookmark]: recoveredValue } },
-          ]),
-        );
-      },
-      { fileId: opened.fileId, bookmark, recoveredValue },
-    );
-    await opened.page.reload({ waitUntil: "domcontentloaded" });
-    await expect(
-      opened.page.locator("#confirm-recover-formless"),
-    ).toBeVisible();
-    await opened.page
-      .locator("#confirm-recover-formless")
-      .getByRole("button", { name: /recover/i })
-      .click();
-
-    await expect(opened.page.locator(cssId(bookmark))).toHaveText(
-      recoveredValue,
-    );
-    expect(
-      await opened.page.evaluate(() => localStorage.getItem("formless")),
-    ).toContain(recoveredValue);
-
-    await opened.page.evaluate(
-      (key) => localStorage.removeItem(key),
-      FORM_LOCAL_STORAGE_KEY,
-    );
-  });
-
-  test("missing bookmark visibility controls the upload payload", async ({
-    page,
-  }, testInfo) => {
-    const opened = await openExistingEditableForm(page);
-    await opened.page.route("**/api/drive/upload-formless/**", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: "{}",
-      }),
-    );
-    const toggle = opened.page.getByRole("button", {
-      name: /show missing|hide missing/i,
     });
-    test.skip(
-      (await toggle.count()) === 0,
-      "The selected form has no missing template bookmarks.",
-    );
 
-    await expect(toggle).toContainText(/show/i);
-    const hiddenUpload = waitForUpload(opened.page, settings.apiBaseUrl);
-    const hiddenRefresh = waitForFormRefresh(opened.page);
-    await confirmSave(opened.page);
-    const hiddenPayload = (await hiddenUpload).postDataJSON() as UploadPayload;
-    await hiddenRefresh;
-    await waitForEditableForm(opened.page);
-
-    await toggle.click();
-    const missingInput = opened.page
-      .locator(
-        '.missing-template-bookmark-input[contenteditable="true"], input.missing-template-bookmark-input:not(:disabled)',
-      )
-      .first();
-    await expect(missingInput).toBeVisible();
-    const missingBookmark = await requiredAttribute(missingInput, "id");
-    const missingValue = marker(testInfo.testId, "missing");
-    await setBookmarkValue(missingInput, missingValue);
-
-    const shownUpload = waitForUpload(opened.page, settings.apiBaseUrl);
-    const shownRefresh = waitForFormRefresh(opened.page);
-    await confirmSave(opened.page);
-    const shownPayload = (await shownUpload).postDataJSON() as UploadPayload;
-    await shownRefresh;
-    await waitForEditableForm(opened.page);
-    expect(hiddenPayload.bookmarks).not.toHaveProperty(missingBookmark);
-    expect(shownPayload.bookmarks[missingBookmark]).toBe(missingValue);
-
-    await toggle.click();
-    const hiddenAgainUpload = waitForUpload(opened.page, settings.apiBaseUrl);
-    await confirmSave(opened.page);
-    const hiddenAgainPayload = (
-      await hiddenAgainUpload
-    ).postDataJSON() as UploadPayload;
-    expect(hiddenAgainPayload.bookmarks).not.toHaveProperty(missingBookmark);
-  });
-
-  test("exports the current form values and sends server-specific save fields", async ({
-    page,
-  }) => {
-    const opened = await openExistingEditableForm(page);
-    const rendered = await readRenderedBookmarks(opened.page);
-    const generateRequest = opened.page.waitForRequest((request) => {
-      const url = new URL(request.url());
-      return (
-        request.method() === "POST" &&
-        url.pathname.includes("/api/formless/generate-form/")
-      );
-    });
-    const downloadPromise = opened.page.waitForEvent("download");
-    await opened.page.getByRole("button", { name: /export/i }).click();
-    const exportPayload = (await generateRequest).postDataJSON() as {
-      bookmarks: BookmarkValues;
-    };
-    const download = await downloadPromise;
-
-    expect(normalizeBookmarkValues(exportPayload.bookmarks)).toMatchObject(
-      normalizeBookmarkValues(rendered),
-    );
-    expect(download.suggestedFilename()).toMatch(/\.docx$/i);
-    const exportedBookmarks = await readDocxBookmarks(download);
-    for (const [bookmark, value] of Object.entries(rendered)) {
-      expect(
-        exportedBookmarks,
-        `Exported DOCX bookmark ${bookmark}`,
-      ).toHaveProperty(bookmark);
-      expect(normalizeBookmarkValue(exportedBookmarks[bookmark])).toBe(
-        normalizeBookmarkValue(value),
-      );
-    }
-
-    const primaryUpload = waitForUpload(opened.page, settings.apiBaseUrl);
-    await confirmSave(opened.page);
-    const primaryPayload = (
-      await primaryUpload
-    ).postDataJSON() as UploadPayload;
-    expect(primaryPayload.formlessConfig).toBeUndefined();
-    expect(primaryPayload.viewSettings).toBeUndefined();
-
-    await opened.page.evaluate(() =>
-      localStorage.setItem("selected-api-server", "secondary"),
-    );
-    await opened.page.route(`${SECONDARY_API_ORIGIN}/**`, async (route) => {
-      if (route.request().method() === "POST") {
-        await route.fulfill({
+    test("edits text, box, and toggle bookmarks and sends updated and untouched values", async ({
+      page,
+    }, testInfo) => {
+      const opened = await openExistingEditableForm(page);
+      const original = await readRenderedBookmarks(opened.page);
+      const changes = await editEveryBookmarkType(opened.page, testInfo.testId);
+      const expected = { ...original, ...changes };
+      await opened.page.route("**/api/drive/upload-formless/**", (route) =>
+        route.fulfill({
           status: 200,
           contentType: "application/json",
           body: "{}",
-        });
-        return;
+        }),
+      );
+      const upload = waitForUpload(opened.page, settings.apiBaseUrl);
+      await confirmSave(opened.page);
+      const payload = (await upload).postDataJSON() as UploadPayload;
+
+      expect(payload.fileId).toBe(opened.fileId);
+      expect(normalizeBookmarkValues(payload.bookmarks)).toMatchObject(
+        normalizeBookmarkValues(expected),
+      );
+      expect(payload.bookmarks["__NoMissings"]).toBe("true");
+    });
+
+    test("refreshes bookmark data and persists a successful backend update", async ({
+      page,
+    }, testInfo) => {
+      const opened = await openExistingEditableForm(page);
+      const original = await readRenderedBookmarks(opened.page);
+      const text = opened.page
+        .locator('formless-text-input [contenteditable="true"]')
+        .first();
+      const bookmark = await requiredAttribute(text, "id");
+      const value = marker(testInfo.testId, "persisted");
+
+      try {
+        await text.fill(value);
+        await text.blur();
+        const upload = waitForUploadResponse(opened.page, settings.apiBaseUrl);
+        await confirmSave(opened.page);
+        const uploadResponse = await upload;
+        if (!uploadResponse.ok()) {
+          throw new Error(
+            `Form save failed with HTTP ${uploadResponse.status()}: ${(await uploadResponse.text()).slice(0, 500)}`,
+          );
+        }
+        await expect(opened.page.locator(cssId(bookmark))).toHaveText(value);
+        await opened.page.reload({ waitUntil: "domcontentloaded" });
+        await discardRecoverableChanges(opened.page);
+        await waitForEditableForm(opened.page);
+        await expect(opened.page.locator(cssId(bookmark))).toHaveText(value);
+      } finally {
+        await restoreBookmarks(opened.page, original, [bookmark]);
       }
-      const requestUrl = new URL(route.request().url());
-      const primaryUrl = new URL(
-        requestUrl.pathname + requestUrl.search,
-        settings.apiBaseUrl,
-      );
-      const response = await route.fetch({ url: primaryUrl.href });
-      await route.fulfill({ response });
     });
-    await opened.page.reload({ waitUntil: "domcontentloaded" });
-    await waitForEditableForm(opened.page);
-    const secondaryUpload = waitForUpload(opened.page, SECONDARY_API_ORIGIN);
-    await confirmSave(opened.page);
-    const secondaryPayload = (
-      await secondaryUpload
-    ).postDataJSON() as UploadPayload;
-    expect(secondaryPayload.formlessConfig).toBeDefined();
-    expect(secondaryPayload.viewSettings).toBeDefined();
-    await opened.page.evaluate(() =>
-      localStorage.removeItem("selected-api-server"),
-    );
-  });
 
-  test("create mode saves the selected config and redirects to edit with row context", async ({
-    page,
-  }) => {
-    await openExecutionsThroughHome(page);
-    const createButton = page
-      .locator("button.grid-sticky-action-create-btn")
-      .first();
-    test.skip(
-      (await createButton.count()) === 0,
-      "The selected sheet has no row eligible for create mode.",
-    );
-    const rowResponsePromise = page.context().waitForEvent("response", {
-      predicate: (response) => {
-        const url = new URL(response.url());
+    test("recovers only unsaved local bookmark changes", async ({
+      page,
+    }, testInfo) => {
+      const opened = await openExistingEditableForm(page);
+      const text = opened.page
+        .locator('formless-text-input [contenteditable="true"]')
+        .first();
+      await expect(text).toBeVisible();
+      const bookmark = await requiredAttribute(text, "id");
+      const recoveredValue = marker(testInfo.testId, "recovered");
+
+      await opened.page.evaluate(
+        ({ fileId, bookmark, recoveredValue }) => {
+          localStorage.setItem(
+            "formless",
+            JSON.stringify([
+              { fileId, bookmarks: { [bookmark]: recoveredValue } },
+            ]),
+          );
+        },
+        { fileId: opened.fileId, bookmark, recoveredValue },
+      );
+      await opened.page.reload({ waitUntil: "domcontentloaded" });
+      await expect(
+        opened.page.locator("#confirm-recover-formless"),
+      ).toBeVisible();
+      await opened.page
+        .locator("#confirm-recover-formless")
+        .getByRole("button", { name: /recover/i })
+        .click();
+
+      await expect(opened.page.locator(cssId(bookmark))).toHaveText(
+        recoveredValue,
+      );
+      expect(
+        await opened.page.evaluate(() => localStorage.getItem("formless")),
+      ).toContain(recoveredValue);
+
+      await opened.page.evaluate(
+        (key) => localStorage.removeItem(key),
+        FORM_LOCAL_STORAGE_KEY,
+      );
+    });
+
+    test("missing bookmark visibility controls the upload payload", async ({
+      page,
+    }, testInfo) => {
+      const opened = await openExistingEditableForm(page);
+      await opened.page.route("**/api/drive/upload-formless/**", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: "{}",
+        }),
+      );
+      const toggle = opened.page.getByRole("button", {
+        name: /show missing|hide missing/i,
+      });
+      test.skip(
+        (await toggle.count()) === 0,
+        "The selected form has no missing template bookmarks.",
+      );
+
+      await expect(toggle).toContainText(/show/i);
+      const hiddenUpload = waitForUpload(opened.page, settings.apiBaseUrl);
+      const hiddenRefresh = waitForFormRefresh(opened.page);
+      await confirmSave(opened.page);
+      const hiddenPayload = (
+        await hiddenUpload
+      ).postDataJSON() as UploadPayload;
+      await hiddenRefresh;
+      await waitForEditableForm(opened.page);
+
+      await toggle.click();
+      const missingInput = opened.page
+        .locator(
+          '.missing-template-bookmark-input[contenteditable="true"], input.missing-template-bookmark-input:not(:disabled)',
+        )
+        .first();
+      await expect(missingInput).toBeVisible();
+      const missingBookmark = await requiredAttribute(missingInput, "id");
+      const missingValue = marker(testInfo.testId, "missing");
+      await setBookmarkValue(missingInput, missingValue);
+
+      const shownUpload = waitForUpload(opened.page, settings.apiBaseUrl);
+      const shownRefresh = waitForFormRefresh(opened.page);
+      await confirmSave(opened.page);
+      const shownPayload = (await shownUpload).postDataJSON() as UploadPayload;
+      await shownRefresh;
+      await waitForEditableForm(opened.page);
+      expect(hiddenPayload.bookmarks).not.toHaveProperty(missingBookmark);
+      expect(shownPayload.bookmarks[missingBookmark]).toBe(missingValue);
+
+      await toggle.click();
+      const hiddenAgainUpload = waitForUpload(opened.page, settings.apiBaseUrl);
+      await confirmSave(opened.page);
+      const hiddenAgainPayload = (
+        await hiddenAgainUpload
+      ).postDataJSON() as UploadPayload;
+      expect(hiddenAgainPayload.bookmarks).not.toHaveProperty(missingBookmark);
+    });
+
+    test("exports the current form values and sends server-specific save fields", async ({
+      page,
+    }) => {
+      const opened = await openExistingEditableForm(page);
+      const rendered = await readRenderedBookmarks(opened.page);
+      const generateRequest = opened.page.waitForRequest((request) => {
+        const url = new URL(request.url());
         return (
-          response.request().method() === "GET" &&
-          url.pathname === "/api/spreadsheets/get/" &&
-          url.searchParams.get("range") === settings.sheetName
+          request.method() === "POST" &&
+          url.pathname.includes("/api/formless/generate-form/")
         );
-      },
-    });
-    const popupPromise = page.waitForEvent("popup");
-    await createButton.click();
-    const formPage = await popupPromise;
-    await formPage.waitForLoadState("domcontentloaded");
-    expect((await rowResponsePromise).ok()).toBe(true);
+      });
+      const downloadPromise = opened.page.waitForEvent("download");
+      await opened.page.getByRole("button", { name: /export/i }).click();
+      const exportPayload = (await generateRequest).postDataJSON() as {
+        bookmarks: BookmarkValues;
+      };
+      const download = await downloadPromise;
 
-    const config = formPage.locator(
-      "page-wrapper select.form-select:not(#static-column)",
-    );
-    await expect(config).toBeEnabled();
-    const options = await config
-      .locator("option")
-      .evaluateAll((items) =>
-        items.map((item) => (item as HTMLOptionElement).value),
+      expect(normalizeBookmarkValues(exportPayload.bookmarks)).toMatchObject(
+        normalizeBookmarkValues(rendered),
       );
-    expect(options.length).toBeGreaterThan(0);
-    const selectedConfig = options.at(-1)!;
-    await config.selectOption(selectedConfig);
+      expect(download.suggestedFilename()).toMatch(/\.docx$/i);
+      const exportedBookmarks = await readDocxBookmarks(download);
+      for (const [bookmark, value] of Object.entries(rendered)) {
+        expect(
+          exportedBookmarks,
+          `Exported DOCX bookmark ${bookmark}`,
+        ).toHaveProperty(bookmark);
+        expect(normalizeBookmarkValue(exportedBookmarks[bookmark])).toBe(
+          normalizeBookmarkValue(value),
+        );
+      }
 
-    await formPage.route("**/api/drive/create-formless/**", (route) =>
-      route.fulfill({
-        status: 200,
-        contentType: "application/json",
-        body: JSON.stringify({ fileId: "ccc-e2e-created-file" }),
-      }),
-    );
+      const primaryUpload = waitForUpload(opened.page, settings.apiBaseUrl);
+      await confirmSave(opened.page);
+      const primaryPayload = (
+        await primaryUpload
+      ).postDataJSON() as UploadPayload;
+      expect(primaryPayload.formlessConfig).toBeUndefined();
+      expect(primaryPayload.viewSettings).toBeUndefined();
 
-    const createRequest = formPage.waitForRequest((request) => {
-      const url = new URL(request.url());
-      return (
-        request.method() === "POST" &&
-        url.pathname.includes("/api/drive/create-formless/")
+      await opened.page.evaluate(() =>
+        localStorage.setItem("selected-api-server", "secondary"),
+      );
+      if (mode !== "frontend") {
+        await opened.page.route(`${SECONDARY_API_ORIGIN}/**`, async (route) => {
+          if (route.request().method() === "POST") {
+            await route.fulfill({
+              status: 200,
+              contentType: "application/json",
+              body: "{}",
+            });
+            return;
+          }
+          const requestUrl = new URL(route.request().url());
+          const primaryUrl = new URL(
+            requestUrl.pathname + requestUrl.search,
+            settings.apiBaseUrl,
+          );
+          const response = await route.fetch({ url: primaryUrl.href });
+          await route.fulfill({ response });
+        });
+      }
+      await opened.page.reload({ waitUntil: "domcontentloaded" });
+      await waitForEditableForm(opened.page);
+      const secondaryUpload = waitForUpload(opened.page, SECONDARY_API_ORIGIN);
+      await confirmSave(opened.page);
+      const secondaryPayload = (
+        await secondaryUpload
+      ).postDataJSON() as UploadPayload;
+      expect(secondaryPayload.formlessConfig).toBeDefined();
+      expect(secondaryPayload.viewSettings).toBeDefined();
+      await opened.page.evaluate(() =>
+        localStorage.removeItem("selected-api-server"),
       );
     });
-    await formPage.getByRole("button", { name: /create/i }).click();
-    const request = await createRequest;
-    expect(new URL(request.url()).pathname).toContain(`/${selectedConfig}`);
-    await expect(formPage).toHaveURL(/#\/edit\/form\/[^/]+\/\d+\?/);
-    const routeUrl = hashUrl(formPage);
-    expect(routeUrl.pathname.endsWith(`/${selectedConfig}`)).toBe(true);
-    expect(routeUrl.searchParams.get("createMode")).toBeNull();
-    expect(routeUrl.searchParams.get("fileId")).toBeTruthy();
-    expect(routeUrl.searchParams.get("clientId")).toBeTruthy();
-    expect(routeUrl.searchParams.get("clinicId")).toBeTruthy();
-    expect(routeUrl.searchParams.get("date")).toBe(settings.sheetName);
-    expect(routeUrl.searchParams.get("row")).toMatch(/^\d+$/);
-  });
-});
+
+    test("create mode saves the selected config and redirects to edit with row context", async ({
+      page,
+    }) => {
+      await openExecutionsThroughHome(page);
+      const createButton = page
+        .locator("button.grid-sticky-action-create-btn")
+        .first();
+      test.skip(
+        (await createButton.count()) === 0,
+        "The selected sheet has no row eligible for create mode.",
+      );
+      const rowResponsePromise = page.context().waitForEvent("response", {
+        predicate: (response) => {
+          const url = new URL(response.url());
+          return (
+            response.request().method() === "GET" &&
+            url.pathname === "/api/spreadsheets/get/" &&
+            url.searchParams.get("range") === settings.sheetName
+          );
+        },
+      });
+      const popupPromise = page.waitForEvent("popup");
+      await createButton.click();
+      const formPage = await popupPromise;
+      await formPage.waitForLoadState("domcontentloaded");
+      expect((await rowResponsePromise).ok()).toBe(true);
+
+      const config = formPage.locator(
+        "page-wrapper select.form-select:not(#static-column)",
+      );
+      await expect(config).toBeEnabled();
+      const options = await config
+        .locator("option")
+        .evaluateAll((items) =>
+          items.map((item) => (item as HTMLOptionElement).value),
+        );
+      expect(options.length).toBeGreaterThan(0);
+      const selectedConfig = options.at(-1)!;
+      await config.selectOption(selectedConfig);
+
+      await formPage.route("**/api/drive/create-formless/**", (route) =>
+        route.fulfill({
+          status: 200,
+          contentType: "application/json",
+          body: JSON.stringify({ fileId: "ccc-e2e-created-file" }),
+        }),
+      );
+
+      const createRequest = formPage.waitForRequest((request) => {
+        const url = new URL(request.url());
+        return (
+          request.method() === "POST" &&
+          url.pathname.includes("/api/drive/create-formless/")
+        );
+      });
+      await formPage.getByRole("button", { name: /create/i }).click();
+      const request = await createRequest;
+      expect(new URL(request.url()).pathname).toContain(`/${selectedConfig}`);
+      await expect(formPage).toHaveURL(/#\/edit\/form\/[^/]+\/\d+\?/);
+      const routeUrl = hashUrl(formPage);
+      expect(routeUrl.pathname.endsWith(`/${selectedConfig}`)).toBe(true);
+      expect(routeUrl.searchParams.get("createMode")).toBeNull();
+      expect(routeUrl.searchParams.get("fileId")).toBeTruthy();
+      expect(routeUrl.searchParams.get("clientId")).toBeTruthy();
+      expect(routeUrl.searchParams.get("clinicId")).toBeTruthy();
+      expect(routeUrl.searchParams.get("date")).toBe(settings.sheetName);
+      expect(routeUrl.searchParams.get("row")).toMatch(/^\d+$/);
+    });
+  },
+);
 
 async function openExistingEditableForm(page: Page): Promise<OpenFormResult> {
   await openExecutionsThroughHome(page);

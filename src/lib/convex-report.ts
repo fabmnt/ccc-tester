@@ -5,7 +5,11 @@ import { ConvexHttpClient } from "convex/browser";
 import { anyApi } from "convex/server";
 import type { CliArguments, ExecutableMode } from "../../e2e/cli-arguments.js";
 import { TEST_CLIENT_NAME, TEST_CLINIC_NAME } from "../../e2e/test-config.js";
-import type { TestResult } from "../../convex/validators.js";
+import {
+  TEST_SCOPES,
+  type TestResult,
+  type TestScope,
+} from "../../convex/validators.js";
 
 const CONVEX_URL_ENV_VAR = "CONVEX_URL";
 const CONVEX_WRITE_SECRET_ENV_VAR = "CONVEX_WRITE_SECRET";
@@ -26,8 +30,14 @@ interface PlaywrightSpec {
 }
 
 interface PlaywrightTest {
+  annotations?: PlaywrightAnnotation[];
   title?: string;
   results?: PlaywrightResult[];
+}
+
+interface PlaywrightAnnotation {
+  type?: string;
+  description?: string;
 }
 
 interface PlaywrightResult {
@@ -194,7 +204,7 @@ function parseTestResults(
       }
 
       results.push({
-        scope: cliArgs.scope,
+        scope: getTestScope(test, cliArgs.scope),
         mode,
         status: finalResult.status === "passed" ? "passed" : "failed",
         startedAt:
@@ -215,6 +225,24 @@ function parseTestResults(
   }
 
   return results;
+}
+
+function getTestScope(
+  test: PlaywrightTest,
+  fallbackScope: TestScope,
+): TestScope {
+  const declaredScope = test.annotations?.find(
+    (annotation) => annotation.type === "scope",
+  )?.description;
+  if (declaredScope === undefined) {
+    return fallbackScope;
+  }
+  if ((TEST_SCOPES as readonly string[]).includes(declaredScope)) {
+    return declaredScope as TestScope;
+  }
+  throw new Error(
+    `Unknown test scope annotation "${declaredScope}". Choose one of: ${TEST_SCOPES.join(", ")}.`,
+  );
 }
 
 function flattenSpecs(suites: PlaywrightSuite[]): PlaywrightSpec[] {

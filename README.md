@@ -2,8 +2,8 @@
 
 CCC Tester runs Playwright checks against the CCCdashboard project. The executions suite opens the classic
 `/#/executions/:clientId` route, exercises sheet navigation, cell editing, filters, file links, and row actions, and
-restores values it changes. It uses only the `Carriers Testing` client and requires real dev or production API
-requests; frontend mock mode skips this suite.
+restores values it changes. It uses only the `Carriers Testing` client. Frontend mode runs the same suites against a
+fully mocked dashboard API.
 
 CCCdashboard must be running separately for local modes. The CLI does not start or stop it.
 
@@ -12,7 +12,7 @@ CCCdashboard must be running separately for local modes. The CLI does not start 
 Create `.env.e2e` in this project. It is ignored by Git:
 
 ```dotenv
-# The e2e suite logs in through the dashboard API with these credentials.
+# Required for dev and production modes. Frontend mode uses mocked authentication.
 USERNAME=your-dashboard-username
 PASSWORD=your-dashboard-password
 ```
@@ -52,8 +52,8 @@ Modes use the following targets:
 
 - `dev`: local CCCdashboard dev server and real API requests.
 - `production`: `https://controlcentralcarrier.com` and real API requests.
-- `frontend`: local CCCdashboard dev server with dashboard API and sync endpoints mocked. The real executions suite is
-  skipped in this mode.
+- `frontend`: local CCCdashboard dev server with dashboard API, form, sync, and document endpoints mocked. No external
+  API writes are made, and the same executions and editable-form tests run.
 - `all`: runs all three modes in parallel.
 
 Use Playwright options after the mode, for example `--headed`, `--debug`, or `--grep executions`.
