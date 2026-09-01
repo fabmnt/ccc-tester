@@ -195,38 +195,6 @@ const initialActiveRunIsRunning = initialActiveRun?.status === "running";
     ].join(":");
   };
 
-  document.addEventListener("click", (event) => {
-    const target = event.target;
-    if (!(target instanceof HTMLElement)) {
-      return;
-    }
-
-    const tab = target.closest<HTMLButtonElement>("[data-environment-tab]");
-    const tabGroup = tab?.closest<HTMLElement>("[data-environment-tabs]");
-    if (!tab || !tabGroup) {
-      return;
-    }
-
-    const selectedEnvironment = tab.dataset.environmentTab;
-    if (!selectedEnvironment) {
-      return;
-    }
-
-    tabGroup
-      .querySelectorAll<HTMLButtonElement>("[data-environment-tab]")
-      .forEach((environmentTab) => {
-        environmentTab.setAttribute(
-          "aria-selected",
-          String(environmentTab === tab),
-        );
-      });
-    tabGroup
-      .querySelectorAll<HTMLElement>("[data-environment-panel]")
-      .forEach((panel) => {
-        panel.hidden = panel.dataset.environmentPanel !== selectedEnvironment;
-      });
-  });
-
   if (convexUrl) {
     const convex = new ConvexClient(convexUrl);
     const activeRunSubscription = convex.onUpdate(

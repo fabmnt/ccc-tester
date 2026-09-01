@@ -15,6 +15,10 @@ No behavior modifications must be done to the CCCdashboard source code, only dat
 - `pnpm format`
 - `pnpm typecheck`
 
+## UI Components
+
+This project uses bejamas ui components. Use bejamas cli to add new components.
+
 <!-- convex-ai-start -->
 
 This project uses [Convex](https://convex.dev) as its backend.
